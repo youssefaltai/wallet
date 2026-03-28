@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "defaultMode": "auto",
+    "deny": [
+      "Read(.env*)",
+      "Read(**/*.key)",
+      "Read(**/*.pem)",
+      "Read(**/secrets/**)",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(sudo *)",
+      "Bash(curl * | sh)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)"
+    ]
+  },
+  "settings": {
+    "autoMemoryEnabled": true
+  }
+}
