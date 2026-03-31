@@ -15,6 +15,8 @@ function extractError(error: unknown): string {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Accepts both YYYY-MM-DD and ISO 8601 datetime strings */
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
 
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -27,6 +29,7 @@ import {
 import {
   createBudget,
   updateBudget,
+  deleteBudget,
   getBudgetDateRanges,
   type BudgetDateRange,
 } from "@/lib/services/budgets";
@@ -84,7 +87,7 @@ export async function createAccountAction(
   formData: FormData,
 ): Promise<{ error?: string } | void> {
   try {
-    const userId = await getAuthUserId();
+    const { id: userId, currency: baseCurrency } = await getAuthUser();
 
     const name = requireString(formData, "name", 100);
     const type = requireString(formData, "type", 50);
@@ -93,12 +96,20 @@ export async function createAccountAction(
     const institution = optionalString(formData, "institution");
     if (institution && institution.length > 100)
       throw new Error("institution is too long");
+    const currency = optionalString(formData, "currency") ?? baseCurrency;
+    const initialBalance = formData.get("initialBalance")
+      ? requireNumber(formData, "initialBalance")
+      : undefined;
+    if (initialBalance !== undefined && initialBalance < 0)
+      throw new Error("Initial balance cannot be negative");
 
     await createAccount({
       userId,
       name,
       type,
       institution,
+      currency,
+      initialBalance,
     });
 
     revalidatePath("/accounts");
@@ -112,22 +123,23 @@ export async function createAccountAction(
 
 export async function createCategoryAction(
   formData: FormData,
-): Promise<{ error?: string; id?: string } | void> {
+): Promise<{ error?: string; id?: string; currency?: string } | void> {
   try {
-    const userId = await getAuthUserId();
+    const { id: userId, currency: baseCurrency } = await getAuthUser();
 
     const name = requireString(formData, "name", 100);
     const type = requireString(formData, "type", 10);
     if (type !== "expense" && type !== "income")
       throw new Error("type must be 'expense' or 'income'");
+    const currency = optionalString(formData, "currency") ?? baseCurrency;
 
-    const category = await createCategory(userId, name, type);
+    const category = await createCategory(userId, name, type, currency);
 
     revalidatePath("/expenses");
     revalidatePath("/income");
     revalidatePath("/transactions");
     revalidatePath("/budgets");
-    return { id: category.id };
+    return { id: category.id, currency: category.currency };
   } catch (error) {
     return { error: extractError(error) };
   }
@@ -187,11 +199,19 @@ export async function createTransactionAction(
     if (!UUID_RE.test(categoryAccountId))
       throw new Error("Invalid category ID");
     const amount = requireNumber(formData, "amount");
+    const creditAmountRaw = optionalString(formData, "creditAmount");
+    const creditAmount = creditAmountRaw ? parseFloat(creditAmountRaw) : undefined;
+    if (creditAmount !== undefined && (isNaN(creditAmount) || creditAmount <= 0))
+      throw new Error("Destination amount must be a positive number");
+    const exchangeRateRaw = optionalString(formData, "exchangeRate");
+    const exchangeRate = exchangeRateRaw ? parseFloat(exchangeRateRaw) : undefined;
+    if (exchangeRate !== undefined && (isNaN(exchangeRate) || exchangeRate <= 0))
+      throw new Error("Exchange rate must be a positive number");
     const description = optionalString(formData, "description");
     if (description && description.length > 500)
       throw new Error("description is too long");
     const date = requireString(formData, "date");
-    if (!DATE_RE.test(date)) throw new Error("Invalid date format");
+    if (!DATETIME_RE.test(date)) throw new Error("Invalid date format");
     const notes = optionalString(formData, "notes");
     if (notes && notes.length > 2000) throw new Error("notes is too long");
     const direction = requireString(formData, "direction");
@@ -209,6 +229,8 @@ export async function createTransactionAction(
       debitAccountId,
       creditAccountId,
       amount: Math.abs(amount),
+      creditAmount,
+      exchangeRate,
       description,
       date,
       notes,
@@ -240,11 +262,19 @@ export async function createTransferAction(
 
     const amount = requireNumber(formData, "amount");
     if (amount <= 0) throw new Error("Amount must be positive");
+    const creditAmountRaw = optionalString(formData, "creditAmount");
+    const creditAmount = creditAmountRaw ? parseFloat(creditAmountRaw) : undefined;
+    if (creditAmount !== undefined && (isNaN(creditAmount) || creditAmount <= 0))
+      throw new Error("Destination amount must be a positive number");
+    const exchangeRateRaw = optionalString(formData, "exchangeRate");
+    const exchangeRate = exchangeRateRaw ? parseFloat(exchangeRateRaw) : undefined;
+    if (exchangeRate !== undefined && (isNaN(exchangeRate) || exchangeRate <= 0))
+      throw new Error("Exchange rate must be a positive number");
     const description = optionalString(formData, "description");
     if (description && description.length > 500)
       throw new Error("description is too long");
     const date = requireString(formData, "date");
-    if (!DATE_RE.test(date)) throw new Error("Invalid date format");
+    if (!DATETIME_RE.test(date)) throw new Error("Invalid date format");
     const notes = optionalString(formData, "notes");
     if (notes && notes.length > 2000) throw new Error("notes is too long");
 
@@ -255,6 +285,8 @@ export async function createTransferAction(
       debitAccountId: toAccountId,
       creditAccountId: fromAccountId,
       amount,
+      creditAmount,
+      exchangeRate,
       description,
       date,
       notes,
@@ -327,7 +359,7 @@ export async function createGoalAction(
   formData: FormData,
 ): Promise<{ error?: string } | void> {
   try {
-    const { id: userId, currency } = await getAuthUser();
+    const { id: userId, currency: baseCurrency } = await getAuthUser();
 
     const name = requireString(formData, "name", 100);
     const targetAmount = requireNumber(formData, "targetAmount");
@@ -336,6 +368,7 @@ export async function createGoalAction(
       throw new Error("Invalid deadline format");
     const notes = optionalString(formData, "notes");
     if (notes && notes.length > 2000) throw new Error("notes is too long");
+    const currency = optionalString(formData, "currency") ?? baseCurrency;
 
     await createGoal({
       userId,
@@ -365,10 +398,18 @@ export async function fundGoalAction(
     if (!UUID_RE.test(sourceAccountId)) throw new Error("Invalid account ID");
     const amount = requireNumber(formData, "amount");
     if (amount <= 0) throw new Error("Amount must be positive");
+    const creditAmountRaw = optionalString(formData, "creditAmount");
+    const creditAmount = creditAmountRaw ? parseFloat(creditAmountRaw) : undefined;
+    if (creditAmount !== undefined && (isNaN(creditAmount) || creditAmount <= 0))
+      throw new Error("Destination amount must be a positive number");
+    const exchangeRateRaw = optionalString(formData, "exchangeRate");
+    const exchangeRate = exchangeRateRaw ? parseFloat(exchangeRateRaw) : undefined;
+    if (exchangeRate !== undefined && (isNaN(exchangeRate) || exchangeRate <= 0))
+      throw new Error("Exchange rate must be a positive number");
     const date = requireString(formData, "date");
-    if (!DATE_RE.test(date)) throw new Error("Invalid date format");
+    if (!DATETIME_RE.test(date)) throw new Error("Invalid date format");
 
-    await fundGoal(goalId, userId, sourceAccountId, amount, date, currency);
+    await fundGoal(goalId, userId, sourceAccountId, amount, date, creditAmount, exchangeRate);
 
     revalidatePath("/goals");
     revalidatePath("/accounts");
@@ -511,15 +552,14 @@ export async function updateBudgetAction(
   }
 }
 
-export async function toggleBudgetAction(
+export async function deleteBudgetAction(
   budgetId: string,
-  isActive: boolean,
 ): Promise<{ error?: string } | void> {
   try {
     if (!UUID_RE.test(budgetId)) throw new Error("Invalid budget ID");
     const userId = await getAuthUserId();
 
-    await updateBudget(budgetId, userId, { isActive });
+    await deleteBudget(userId, budgetId);
 
     revalidatePath("/budgets");
     revalidatePath("/expenses");
@@ -552,6 +592,14 @@ export async function getBudgetDateRangesAction(
 
 // ── Goal mutations ──────────────────────────────────────────────────────
 
+// ── Currency / global ────────────────────────────────────────────────────
+
+/** Invalidate every cached route after a cross-cutting change (e.g. currency). */
+export async function revalidateAllAction() {
+  await getAuthUserId(); // ensure authenticated
+  revalidatePath("/", "layout");
+}
+
 export async function updateGoalAction(
   formData: FormData,
 ): Promise<{ error?: string } | void> {
@@ -571,15 +619,13 @@ export async function updateGoalAction(
       throw new Error("Invalid deadline format");
     const notes = optionalString(formData, "notes");
     if (notes && notes.length > 2000) throw new Error("notes is too long");
-    const status = optionalString(formData, "status");
 
     await updateGoal(goalId, userId, {
       ...(name && { name }),
       ...(targetAmount !== undefined && { targetAmount }),
       ...(deadline && { deadline }),
       ...(notes !== undefined && { notes }),
-      ...(status && { status }),
-    }, currency);
+    });
 
     revalidatePath("/goals");
     revalidatePath("/dashboard");

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { AnimateIn } from "@/components/shared/animate-in";
-import { formatDateFull, formatDate, formatDateRange } from "@/lib/utils/format-date";
+import { formatDateFull, formatRelativeDateTime, formatDateRange } from "@/lib/utils/format-date";
 
 export const metadata: Metadata = { title: "Budget Details | Wallet" };
 
@@ -78,12 +78,7 @@ export default async function BudgetDetailPage({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-xl">{budget.name}</CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{budget.categoryName}</Badge>
-              {!budget.isActive && (
-                <Badge variant="outline">Inactive</Badge>
-              )}
-            </div>
+            <Badge variant="secondary">{budget.categoryName}</Badge>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-baseline justify-between">
@@ -105,7 +100,7 @@ export default async function BudgetDetailPage({
               <span>
                 {budget.remaining >= 0
                   ? `${budget.remainingFormatted} remaining`
-                  : `${new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Math.abs(budget.remaining))} over budget`}
+                  : `${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(Math.abs(budget.remaining))} over budget`}
                 {" \u2013 "}
                 {Math.round(budget.percentUsed)}% used
               </span>
@@ -141,7 +136,7 @@ export default async function BudgetDetailPage({
                 {transactions.map((txn, i) => (
                   <TableRow key={txn.id} className="animate-fade-up" style={{ animationDelay: `${i * 20}ms` }}>
                     <TableCell className="whitespace-nowrap">
-                      {formatDate(txn.date)}
+                      {formatRelativeDateTime(txn.date)}
                     </TableCell>
                     <TableCell>{txn.description}</TableCell>
                     <TableCell>

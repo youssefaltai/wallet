@@ -13,6 +13,8 @@ import { CreateBudgetCard } from "./create-budget-card";
 import { CreateGoalCard } from "./create-goal-card";
 import { GoalFundCard } from "./fund-goal-card";
 import { MutationSuccessCard } from "./mutation-success-card";
+import { ConvertCurrencyCard } from "./convert-currency-card";
+import { BatchResultCard } from "./batch-result-card";
 
 type CardComponent = ComponentType<{ output: unknown; toolName?: string }>;
 
@@ -26,16 +28,38 @@ export const toolCardRegistry: Record<string, CardComponent> = {
   get_goals: GoalsCard,
   get_net_worth: NetWorthCard,
   get_cash_flow: CashFlowCard,
+  convert_currency: ConvertCurrencyCard,
 
   // Write tools — specific cards for creates
-  create_account: CreateAccountCard,
-  create_transaction: CreateTransactionCard,
+  create_asset_account: CreateAccountCard,
+  create_liability: CreateAccountCard,
+  record_expense: CreateTransactionCard,
+  record_income: CreateTransactionCard,
+  record_transfer: CreateTransactionCard,
   create_budget: CreateBudgetCard,
   create_goal: CreateGoalCard,
 
   // Write tools — goal funding
   fund_goal: GoalFundCard,
   withdraw_from_goal: GoalFundCard,
+
+  // Write tools — expense category management
+  create_expense_category: MutationSuccessCard,
+  rename_expense_category: MutationSuccessCard,
+  delete_expense_category: MutationSuccessCard,
+
+  // Write tools — income source management
+  create_income_source: MutationSuccessCard,
+  rename_income_source: MutationSuccessCard,
+  delete_income_source: MutationSuccessCard,
+
+  // Write tools — batch operations
+  batch_create_transactions: BatchResultCard,
+  batch_delete_transactions: BatchResultCard,
+  batch_create_budgets: BatchResultCard,
+  batch_fund_goals: BatchResultCard,
+  batch_create_goals: BatchResultCard,
+  batch_create_accounts: BatchResultCard,
 
   // Write tools — generic success for updates/deletes
   update_account: MutationSuccessCard,

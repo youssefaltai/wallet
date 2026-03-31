@@ -40,12 +40,12 @@ import {
 import {
   createBudgetAction,
   updateBudgetAction,
-  toggleBudgetAction,
+  deleteBudgetAction,
 } from "../actions";
 import { AnimateIn } from "@/components/shared/animate-in";
 import {
   PencilIcon,
-  PowerIcon,
+  Trash2Icon,
 } from "lucide-react";
 import type { BudgetStatus } from "@/lib/services/budgets";
 import type { Category } from "@/lib/services/categories";
@@ -66,13 +66,11 @@ export function BudgetList({
   const [editOpen, setEditOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetStatus | null>(null);
 
-  const activeBudgets = budgets.filter((b) => b.isActive);
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-muted-foreground">
-          {activeBudgets.length} active budget{activeBudgets.length !== 1 && "s"}
+          {budgets.length} budget{budgets.length !== 1 && "s"}
         </p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>Add Budget</DialogTrigger>
@@ -184,9 +182,6 @@ export function BudgetList({
                           {budget.categoryName && (
                             <Badge variant="secondary">{budget.categoryName}</Badge>
                           )}
-                          {!budget.isActive && (
-                            <Badge variant="outline">Inactive</Badge>
-                          )}
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
@@ -207,7 +202,7 @@ export function BudgetList({
                           <span>
                             {budget.remaining >= 0
                               ? `${budget.remainingFormatted} left`
-                              : `${new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Math.abs(budget.remaining))} over`}
+                              : `${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(Math.abs(budget.remaining))} over`}
                             {" \u00B7 "}
                             {Math.round(budget.percentUsed)}% used
                           </span>
@@ -231,18 +226,13 @@ export function BudgetList({
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       onClick={async () => {
-                        if (budget.isActive) {
-                          if (!(await confirm(`Deactivate the budget "${budget.name}"? It will no longer track spending.`))) return;
-                        }
-                        const result = await toggleBudgetAction(
-                          budget.id,
-                          !budget.isActive
-                        );
+                        if (!(await confirm(`Delete the budget "${budget.name}"? This action cannot be undone.`))) return;
+                        const result = await deleteBudgetAction(budget.id);
                         if (result?.error) showError(result.error);
                       }}
                     >
-                      <PowerIcon />
-                      {budget.isActive ? "Deactivate" : "Activate"}
+                      <Trash2Icon />
+                      Delete
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>

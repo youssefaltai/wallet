@@ -328,8 +328,8 @@ test.describe("Budgets", () => {
     await expect(card).toContainText("$120.00 left");
   });
 
-  // ── 10. Inactive budget (isActive=false) is not displayed ───────────────
-  test("inactive budget is not displayed on category card", async ({
+  // ── 10. Deleted budget is not displayed ───────────────────────────────────
+  test("deleted budget is not displayed on category card", async ({
     authedPage,
     testUser,
   }) => {
@@ -343,10 +343,9 @@ test.describe("Budgets", () => {
       endDate: MONTH_END,
     });
 
-    // Deactivate the budget directly in the DB
+    // Delete the budget directly in the DB
     await db
-      .update(budgets)
-      .set({ isActive: false })
+      .delete(budgets)
       .where(eq(budgets.id, budget.id));
 
     await seedExpense(testUser.id, asset.id, travel.id, 300, {

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { formatCurrency, formatDate, isValidToolOutput } from "./format";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isValidToolOutput } from "./format";
 
 interface Transaction {
   id: string;
@@ -24,23 +25,14 @@ interface TransactionsData {
 const COLLAPSED_LIMIT = 5;
 
 export function TransactionsCard({ output }: { output: unknown }) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   if (!output || typeof output !== "object") return null;
   if (!("transactions" in output)) return null;
   if (!isValidToolOutput(output)) return null;
   const data = output as TransactionsData;
 
-  if (data.transactions.length === 0) {
-    return (
-      <Card size="sm" className="max-w-sm">
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {data.message ?? "No transactions found."}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (data.transactions.length === 0) return null;
 
   const visible = expanded
     ? data.transactions
@@ -48,29 +40,43 @@ export function TransactionsCard({ output }: { output: unknown }) {
   const hiddenCount = data.transactions.length - COLLAPSED_LIMIT;
 
   return (
-    <Card size="sm" className="max-w-sm">
+    <Card
+      className="cursor-pointer transition-colors hover:bg-muted/50"
+      onClick={() => router.push("/transactions")}
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">
+          {data.transactions.length} transaction{data.transactions.length !== 1 && "s"}
+        </CardTitle>
+      </CardHeader>
       <CardContent className="space-y-0">
         {visible.map((t) => (
-          <div key={t.id} className="py-1.5 text-sm">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="font-medium truncate">{t.description}</span>
-              <span
-                className={`tabular-nums shrink-0 font-medium ${t.amount >= 0 ? "text-positive" : "text-negative"}`}
-              >
-                {formatCurrency(t.amount)}
-              </span>
+          <div
+            key={t.id}
+            className="flex items-center justify-between py-2 border-b last:border-b-0"
+          >
+            <div className="min-w-0">
+              <p className="font-medium truncate">{t.description}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t.categoryName && <span>{t.categoryName}</span>}
+                {t.categoryName && t.accountName && <span> · </span>}
+                {t.accountName && <span>{t.accountName}</span>}
+              </p>
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {formatDate(t.date)}
-              {t.categoryName && <span> · {t.categoryName}</span>}
-              {t.accountName && <span> · {t.accountName}</span>}
-            </div>
+            <span
+              className={`tabular-nums shrink-0 ml-4 font-medium ${t.amount >= 0 ? "text-positive" : "text-negative"}`}
+            >
+              {t.amountFormatted}
+            </span>
           </div>
         ))}
         {hiddenCount > 0 && !expanded && (
           <button
-            onClick={() => setExpanded(true)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors pt-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(true);
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors pt-2"
           >
             Show {hiddenCount} more…
           </button>

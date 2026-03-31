@@ -52,7 +52,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pb-6">
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}

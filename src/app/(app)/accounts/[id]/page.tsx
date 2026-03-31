@@ -22,7 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import { AnimateIn } from "@/components/shared/animate-in";
-import { formatDate } from "@/lib/utils/format-date";
+import { formatRelativeDateTime } from "@/lib/utils/format-date";
 
 export const metadata: Metadata = { title: "Account Details | Wallet" };
 
@@ -124,7 +124,7 @@ export default async function AccountDetailPage({
                     style={{ animationDelay: `${i * 20}ms` }}
                   >
                     <TableCell className="whitespace-nowrap">
-                      {formatDate(txn.date)}
+                      {formatRelativeDateTime(txn.date)}
                     </TableCell>
                     <TableCell>{txn.description}</TableCell>
                     <TableCell>

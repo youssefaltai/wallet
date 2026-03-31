@@ -1,4 +1,8 @@
-import { Card, CardContent } from "@/components/ui/card";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { formatCurrency, formatPeriod, isValidToolOutput } from "./format";
 
@@ -15,7 +19,6 @@ interface BudgetStatus {
   percentUsed: number;
   startDate: string;
   endDate: string;
-  isActive: boolean;
 }
 
 interface BudgetStatusData {
@@ -24,70 +27,68 @@ interface BudgetStatusData {
 }
 
 export function BudgetStatusCard({ output }: { output: unknown }) {
+  const router = useRouter();
   if (!output || typeof output !== "object") return null;
   if (!("budgets" in output)) return null;
   if (!isValidToolOutput(output)) return null;
   const data = output as BudgetStatusData;
 
-  if (data.budgets.length === 0) {
-    return (
-      <Card size="sm" className="max-w-sm">
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {data.message ?? "No budgets set up."}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (data.budgets.length === 0) return null;
 
   return (
-    <Card size="sm" className="max-w-sm">
-      <CardContent className="space-y-4">
-        {data.budgets.map((b) => {
-          const barColor =
-            b.percentUsed >= 90
-              ? "bg-negative"
-              : b.percentUsed >= 75
-                ? "bg-warning"
-                : "bg-positive";
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+      {data.budgets.map((budget) => {
+        const barColor =
+          budget.percentUsed >= 90
+            ? "bg-negative"
+            : budget.percentUsed >= 75
+              ? "bg-warning"
+              : "bg-positive";
 
-          return (
-            <div key={b.id} className="space-y-1.5">
-              <div className="flex items-baseline justify-between text-sm">
-                <div>
-                  <span className="font-medium">{b.name}</span>
-                  {b.categoryName && (
-                    <span className="text-muted-foreground text-xs ml-1.5">
-                      {b.categoryName}
-                    </span>
-                  )}
-                </div>
-                <span className="tabular-nums text-muted-foreground text-xs shrink-0 ml-3">
-                  {formatCurrency(b.spent)} / {formatCurrency(b.budgetAmount)}
+        return (
+          <Card
+            key={budget.id}
+            className="cursor-pointer transition-colors hover:bg-muted/50"
+            onClick={() => router.push("/budgets")}
+          >
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">
+                {budget.name}
+              </CardTitle>
+              {budget.categoryName && (
+                <Badge variant="secondary">{budget.categoryName}</Badge>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-bold">
+                  {budget.spentFormatted}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  of {budget.budgetAmountFormatted}
                 </span>
               </div>
               <ProgressBar
-                value={b.percentUsed}
-                className="h-1 overflow-hidden"
+                value={budget.percentUsed}
+                className="overflow-hidden"
                 barClassName={`${barColor} transition-all`}
               />
-              <div className="flex items-baseline justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {b.remaining >= 0
-                    ? `${formatCurrency(b.remaining)} left`
-                    : `${formatCurrency(Math.abs(b.remaining))} over`}
+              <div className="flex items-baseline justify-between text-xs text-muted-foreground">
+                <span>
+                  {budget.remaining >= 0
+                    ? `${budget.remainingFormatted} left`
+                    : `${formatCurrency(Math.abs(budget.remaining))} over`}
                   {" · "}
-                  {Math.round(b.percentUsed)}% used
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatPeriod({ startDate: b.startDate, endDate: b.endDate })}
-                </p>
+                  {Math.round(budget.percentUsed)}% used
+                </span>
+                <span>
+                  {formatPeriod({ startDate: budget.startDate, endDate: budget.endDate })}
+                </span>
               </div>
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
   );
 }

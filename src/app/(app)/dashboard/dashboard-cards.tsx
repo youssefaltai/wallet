@@ -20,12 +20,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   liability: "Credit & Loans",
 };
 
-const GOAL_STATUS_BADGE: Record<string, "default" | "secondary" | "outline"> = {
-  active: "default",
-  completed: "secondary",
-  paused: "outline",
-};
-
 // ── Account Cards ───────────────────────────────────────────────────────
 
 export function DashboardAccountCards({
@@ -47,7 +41,7 @@ export function DashboardAccountCards({
   }
 
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
       {accounts.map((account, i) => (
         <AnimateIn key={account.id} delay={baseDelay + i * 50}>
           <Card
@@ -95,7 +89,7 @@ export function DashboardBudgetCards({
     new Intl.NumberFormat("en-US", { style: "currency", currency }).format(n);
 
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
       {budgets.map((budget, i) => {
         const barColor =
           budget.percentUsed >= 90
@@ -136,7 +130,7 @@ export function DashboardBudgetCards({
                   <span>
                     {budget.remaining >= 0
                       ? `${budget.remainingFormatted} left`
-                      : `${fmt(Math.abs(budget.remaining))} over`}
+                      : `${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(Math.abs(budget.remaining))} over`}
                     {" \u00B7 "}
                     {Math.round(budget.percentUsed)}% used
                   </span>
@@ -165,20 +159,17 @@ export function DashboardGoalCards({
   const router = useRouter();
 
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
       {goals.map((goal, i) => (
         <AnimateIn key={goal.id} delay={baseDelay + i * 50}>
           <Card
             className="cursor-pointer transition-colors hover:bg-muted/50"
             onClick={() => router.push("/goals")}
           >
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium truncate">
                 {goal.name}
               </CardTitle>
-              <Badge variant={GOAL_STATUS_BADGE[goal.status] ?? "outline"}>
-                {goal.status}
-              </Badge>
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline justify-between">

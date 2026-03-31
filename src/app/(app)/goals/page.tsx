@@ -21,7 +21,7 @@ export default async function GoalsPage({
   const currency = session.user.currency;
   const { monthKey: currentMonth } = parseMonthParam(params.date);
   const [goals, accounts] = await Promise.all([
-    getGoals(session.user.id, { deadlineMonth: currentMonth, currency }),
+    getGoals(session.user.id, { deadlineMonth: currentMonth }),
     getAccountsWithBalances(session.user.id, currency),
   ]);
 

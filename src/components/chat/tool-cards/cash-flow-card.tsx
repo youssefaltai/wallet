@@ -1,4 +1,7 @@
-import { Card, CardContent } from "@/components/ui/card";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatPeriod, isValidToolOutput } from "./format";
 
 interface CashFlowData {
@@ -6,39 +9,45 @@ interface CashFlowData {
   income: number;
   expenses: number;
   netCashFlow: number;
+  currency?: string;
 }
 
 export function CashFlowCard({ output }: { output: unknown }) {
+  const router = useRouter();
   if (!output || typeof output !== "object") return null;
   if (!("income" in output)) return null;
   if (!isValidToolOutput(output)) return null;
   const data = output as CashFlowData;
+  const cur = data.currency;
 
   return (
-    <Card size="sm" className="max-w-sm">
-      <CardContent className="space-y-3">
+    <Card
+      className="cursor-pointer transition-colors hover:bg-muted/50"
+      onClick={() => router.push("/dashboard")}
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">Cash Flow</CardTitle>
         <p className="text-xs text-muted-foreground">
           {formatPeriod(data.period)}
         </p>
-        <div className="flex gap-6 text-sm">
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div
+          className={`text-2xl font-bold tabular-nums ${data.netCashFlow >= 0 ? "text-positive" : "text-negative"}`}
+        >
+          {formatCurrency(data.netCashFlow, cur)}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-muted-foreground">Income</p>
-            <p className="font-medium tabular-nums text-positive">
-              {formatCurrency(data.income)}
+            <p className="text-sm font-medium tabular-nums text-positive">
+              {formatCurrency(data.income, cur)}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Expenses</p>
-            <p className="font-medium tabular-nums text-negative">
-              {formatCurrency(data.expenses)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Net</p>
-            <p
-              className={`font-semibold tabular-nums ${data.netCashFlow >= 0 ? "text-positive" : "text-negative"}`}
-            >
-              {formatCurrency(data.netCashFlow)}
+            <p className="text-sm font-medium tabular-nums text-negative">
+              {formatCurrency(data.expenses, cur)}
             </p>
           </div>
         </div>

@@ -19,6 +19,7 @@ export async function getUserProfile(id: string) {
       email: users.email,
       image: users.image,
       emailVerified: users.emailVerified,
+      currency: users.currency,
     })
     .from(users)
     .where(eq(users.id, id))

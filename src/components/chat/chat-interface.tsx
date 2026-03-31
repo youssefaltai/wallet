@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+
 import { mutate } from "swr";
 import type { UIMessage } from "ai";
 import { ArrowUp, Square } from "lucide-react";
@@ -177,7 +178,7 @@ export function ChatInterface({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
-            className="min-h-[44px] max-h-[200px] resize-none"
+            className="min-h-[44px] max-h-[200px] resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap"
             rows={1}
           />
           {isLoading ? (

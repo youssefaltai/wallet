@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useErrorDialog } from "@/hooks/use-error-dialog";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
-import { Landmark, CreditCard, ArrowLeft, ArrowRightIcon, PencilIcon, PowerIcon } from "lucide-react";
+import { Landmark, CreditCard, ArrowLeft, ArrowRightIcon, PencilIcon, PowerIcon, WalletIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,7 +36,9 @@ import {
   toggleAccountAction,
 } from "../actions";
 import { AnimateIn } from "@/components/shared/animate-in";
+import { QuickPayDialog } from "@/components/shared/quick-pay-dialog";
 import type { AccountWithBalance } from "@/lib/services/accounts";
+import { CurrencySelect } from "@/components/shared/currency-select";
 
 /** Friendly labels for the two account types. */
 const TYPE_META = {
@@ -57,9 +59,11 @@ type AccountType = "asset" | "liability";
 export function AccountList({
   accounts,
   currency = "USD",
+  totalFormatted,
 }: {
   accounts: AccountWithBalance[];
   currency?: string;
+  totalFormatted: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,10 +81,15 @@ export function AccountList({
   const [selectedType, setSelectedType] = useState<AccountType | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountWithBalance | null>(null);
+  const [payAccountId, setPayAccountId] = useState<string | null>(null);
 
-  const totalBalance = accounts
-    .filter((a) => a.isActive)
-    .reduce((sum, a) => sum + a.balance, 0);
+  const assetAccounts = useMemo(
+    () => accounts.filter((a) => a.type === "asset" && a.isActive),
+    [accounts]
+  );
+  const payAccount = payAccountId
+    ? accounts.find((a) => a.id === payAccountId) ?? null
+    : null;
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -93,10 +102,7 @@ export function AccountList({
         <p className="text-muted-foreground">
           Total balance:{" "}
           <span className="font-semibold text-foreground">
-            {new Intl.NumberFormat("en-US", {
-              style: "currency",
-              currency,
-            }).format(totalBalance)}
+            {totalFormatted}
           </span>
         </p>
         <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -189,6 +195,25 @@ export function AccountList({
                       }
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="currency">Currency</Label>
+                    <CurrencySelect
+                      id="currency"
+                      name="currency"
+                      defaultValue={currency}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="initialBalance">Starting Balance (optional)</Label>
+                    <Input
+                      id="initialBalance"
+                      name="initialBalance"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                    />
+                  </div>
                   <Button type="submit" className="w-full">
                     Create Account
                   </Button>
@@ -232,6 +257,9 @@ export function AccountList({
                                 {account.name}
                               </CardTitle>
                               <div className="flex items-center gap-2">
+                                {account.currency !== currency && (
+                                  <Badge variant="secondary">{account.currency}</Badge>
+                                )}
                                 {!account.isActive && (
                                   <Badge variant="outline">Inactive</Badge>
                                 )}
@@ -246,6 +274,23 @@ export function AccountList({
                                   {account.institution}
                                 </p>
                               )}
+                              {account.type === "liability" && (
+                                <div className="mt-3 flex justify-end">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-auto py-0.5 px-2 text-xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      setPayAccountId(account.id);
+                                    }}
+                                  >
+                                    <WalletIcon className="size-3" data-icon="inline-start" />
+                                    Quick Pay
+                                  </Button>
+                                </div>
+                              )}
                             </CardContent>
                           </Card>
                         </ContextMenuTrigger>
@@ -256,6 +301,17 @@ export function AccountList({
                             <ArrowRightIcon />
                             View Transactions
                           </ContextMenuItem>
+                          {account.type === "liability" && (
+                            <>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                onClick={() => setPayAccountId(account.id)}
+                              >
+                                <WalletIcon />
+                                Quick Pay
+                              </ContextMenuItem>
+                            </>
+                          )}
                           <ContextMenuSeparator />
                           <ContextMenuItem
                             onClick={() => {
@@ -294,6 +350,17 @@ export function AccountList({
 
       <ConfirmDialog />
       <ErrorDialog />
+
+      {payAccount && (
+        <QuickPayDialog
+          account={payAccount}
+          sourceAccounts={assetAccounts}
+          open={!!payAccountId}
+          onOpenChange={(open) => {
+            if (!open) setPayAccountId(null);
+          }}
+        />
+      )}
 
       {/* Edit Account Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

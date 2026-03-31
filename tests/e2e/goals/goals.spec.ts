@@ -1,21 +1,5 @@
 import { test, expect } from "../../fixtures/auth";
-import { db } from "../../fixtures/auth";
 import { seedAccount, seedGoal, seedBalance } from "../../fixtures/db-helpers";
-import * as schema from "../../../src/lib/db/schema";
-import { eq } from "drizzle-orm";
-
-// Helper: a deadline within the current month
-function deadlineThisMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-15`;
-}
-
-// Helper: a deadline in a different month (3 months from now)
-function deadlineOtherMonth(): string {
-  const now = new Date();
-  const future = new Date(now.getFullYear(), now.getMonth() + 3, 15);
-  return `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, "0")}-15`;
-}
 
 test.describe("Goals", () => {
   // ── 1. Empty state ────────────────────────────────────────────────────
@@ -189,8 +173,8 @@ test.describe("Goals", () => {
     await expect(authedPage.locator('[data-slot="card"]').filter({ hasText: "Goal Alpha" })).toBeVisible();
     await expect(authedPage.locator('[data-slot="card"]').filter({ hasText: "Goal Beta" })).toBeVisible();
     await expect(authedPage.locator('[data-slot="card"]').filter({ hasText: "Goal Gamma" })).toBeVisible();
-    // Active count in the summary paragraph
-    await expect(authedPage.locator("p.text-muted-foreground", { hasText: "3 active goals" })).toBeVisible();
+    // Count in the summary paragraph
+    await expect(authedPage.locator("p.text-muted-foreground", { hasText: "3 goals" })).toBeVisible();
   });
 
   // ── 10. Progress bar visual accuracy (width matches percentage) ───────
@@ -225,55 +209,7 @@ test.describe("Goals", () => {
     await expect(progressBarInner).toHaveAttribute("style", /width:\s*75%/, { timeout: 5000 });
   });
 
-  // ── 11. Completed goal display ────────────────────────────────────────
-
-  test("completed goal displays with completed badge", async ({
-    authedPage,
-    testUser,
-  }) => {
-    const { goal } = await seedGoal(testUser.id, {
-      name: "Completed Goal",
-      targetAmount: 1000,
-    });
-
-    // Update status to completed directly via DB
-    await db
-      .update(schema.goals)
-      .set({ status: "completed" })
-      .where(eq(schema.goals.id, goal.id));
-
-    await authedPage.goto("/goals");
-    const goalCard = authedPage.locator('[data-slot="card"]').filter({ hasText: "Completed Goal" });
-    await expect(goalCard.locator('[data-slot="card-title"]')).toContainText("Completed Goal");
-    await expect(goalCard.locator('[data-slot="badge"]')).toContainText("completed");
-  });
-
-  // ── 12. Paused goal display ───────────────────────────────────────────
-
-  test("paused goal displays with paused badge", async ({
-    authedPage,
-    testUser,
-  }) => {
-    const { goal } = await seedGoal(testUser.id, {
-      name: "Paused Goal",
-      targetAmount: 2000,
-    });
-
-    await db
-      .update(schema.goals)
-      .set({ status: "paused" })
-      .where(eq(schema.goals.id, goal.id));
-
-    await authedPage.goto("/goals");
-    const goalCard = authedPage.locator('[data-slot="card"]').filter({ hasText: "Paused Goal" });
-    await expect(goalCard.locator('[data-slot="badge"]')).toContainText("paused");
-    // Paused goals should NOT show the "Quick Fund" button
-    await expect(
-      goalCard.getByRole("button", { name: "Quick Fund" }),
-    ).not.toBeVisible();
-  });
-
-  // ── 13. Large target amount formats correctly ─────────────────────────
+  // ── 11. Large target amount formats correctly ──────────────────────────
 
   test("goal with large target amount ($100,000) formats correctly", async ({
     authedPage,
@@ -289,48 +225,7 @@ test.describe("Goals", () => {
     await expect(goalCard.locator(".text-sm.text-muted-foreground", { hasText: "of" })).toContainText("of $100,000.00");
   });
 
-  // ── 14. Goals filtered by current month's deadline ────────────────────
-
-  test("completed goals are filtered by deadline month", async ({
-    authedPage,
-    testUser,
-  }) => {
-    // Completed goal with deadline THIS month -- should appear
-    const { goal: goal1 } = await seedGoal(testUser.id, {
-      name: "This Month Goal",
-      targetAmount: 500,
-      deadline: deadlineThisMonth(),
-    });
-
-    // Completed goal with deadline in a DIFFERENT month -- should NOT appear
-    const { goal: goal2 } = await seedGoal(testUser.id, {
-      name: "Other Month Goal",
-      targetAmount: 500,
-      deadline: deadlineOtherMonth(),
-    });
-
-    // Mark both as completed
-    await db
-      .update(schema.goals)
-      .set({ status: "completed" })
-      .where(eq(schema.goals.id, goal1.id));
-    await db
-      .update(schema.goals)
-      .set({ status: "completed" })
-      .where(eq(schema.goals.id, goal2.id));
-
-    // Navigate to goals page (defaults to current month)
-    await authedPage.goto("/goals");
-
-    // The current-month completed goal should be visible
-    await expect(authedPage.locator('[data-slot="card"]').filter({ hasText: "This Month Goal" })).toBeVisible();
-    // The other-month completed goal should NOT be visible
-    await expect(
-      authedPage.locator('[data-slot="card"]').filter({ hasText: "Other Month Goal" }),
-    ).not.toBeVisible();
-  });
-
-  // ── 15. Navigation from dashboard "View all" link ─────────────────────
+  // ── 13. Navigation from dashboard "View all" link ──────────────────────
 
   test("navigating to goals from dashboard View all link", async ({
     authedPage,

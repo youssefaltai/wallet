@@ -1,6 +1,9 @@
-import { Card, CardContent } from "@/components/ui/card";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import { formatCurrency, isValidToolOutput } from "./format";
+import { isValidToolOutput } from "./format";
 
 interface GoalFundResult {
   success: boolean;
@@ -16,30 +19,40 @@ interface GoalFundResult {
 }
 
 export function GoalFundCard({ output }: { output: unknown }) {
+  const router = useRouter();
   if (!output || typeof output !== "object") return null;
   if (!("goal" in output)) return null;
   if (!isValidToolOutput(output)) return null;
   const data = output as GoalFundResult;
   const g = data.goal;
+
   return (
-    <Card size="sm" className="max-w-sm">
+    <Card
+      className="cursor-pointer transition-colors hover:bg-muted/50"
+      onClick={() => router.push("/goals")}
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium truncate">
+          {g.name}
+        </CardTitle>
+      </CardHeader>
       <CardContent>
-        <div className="py-1">
-          <div className="flex items-baseline justify-between text-sm">
-            <span className="font-medium truncate">{g.name}</span>
-            <span className="tabular-nums shrink-0 ml-3 text-sm">
-              {formatCurrency(g.currentAmount)} / {formatCurrency(g.targetAmount)}
-            </span>
-          </div>
-          <ProgressBar
-            value={g.progressPercent}
-            className="mt-1.5 h-1.5 overflow-hidden"
-            barClassName="bg-primary transition-all"
-          />
-          <p className="mt-0.5 text-xs text-muted-foreground text-right">
-            {g.progressPercent}%
-          </p>
+        <div className="flex items-baseline justify-between">
+          <span className="text-2xl font-bold">
+            {g.currentAmountFormatted}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            of {g.targetAmountFormatted}
+          </span>
         </div>
+        <ProgressBar
+          value={g.progressPercent}
+          className="mt-3 overflow-hidden"
+          barClassName="bg-primary transition-all"
+        />
+        <p className="mt-1 text-xs text-muted-foreground text-right">
+          {g.progressPercent}%
+        </p>
       </CardContent>
     </Card>
   );

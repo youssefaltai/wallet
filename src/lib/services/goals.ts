@@ -5,6 +5,9 @@
  * accounts table. That account is excluded from getAccountsWithBalances so
  * it never appears in the user's regular account list.
  *
+ * The goal's backing account uses the user's base currency at creation time.
+ * Funding from a different-currency account is a cross-currency transfer.
+ *
  * Balances are computed on the fly from journal_lines — nothing is stored.
  */
 
@@ -13,6 +16,7 @@ import { goals, accounts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAccountBalances, createJournalEntry, type Tx } from "./ledger";
 import { toMinorUnits, toMajorUnits, formatMoney } from "./money";
+import { getRates, convert } from "./fx-rates";
 
 // ── Create ────────────────────────────────────────────────────────────────
 
@@ -22,10 +26,12 @@ export interface CreateGoalInput {
   targetAmount: number; // major units
   deadline?: string;
   notes?: string;
-  currency?: string;
+  currency?: string; // user's base currency — used for the backing account
 }
 
 export async function createGoal(input: CreateGoalInput) {
+  const goalCurrency = input.currency ?? "USD";
+
   return db.transaction(async (tx: Tx) => {
     // Create a hidden backing account for this goal
     const [account] = await tx
@@ -34,6 +40,7 @@ export async function createGoal(input: CreateGoalInput) {
         userId: input.userId,
         name: `Goal: ${input.name}`,
         type: "asset",
+        currency: goalCurrency,
       })
       .returning();
 
@@ -43,13 +50,13 @@ export async function createGoal(input: CreateGoalInput) {
         userId: input.userId,
         accountId: account.id,
         name: input.name,
-        targetAmount: toMinorUnits(input.targetAmount),
+        targetAmount: toMinorUnits(input.targetAmount, goalCurrency),
         deadline: input.deadline ?? null,
         notes: input.notes ?? null,
       })
       .returning();
 
-    return formatGoal(goal, 0n, input.currency);
+    return formatGoal(goal, 0n, goalCurrency);
   });
 }
 
@@ -62,17 +69,25 @@ export async function updateGoal(
     name?: string;
     targetAmount?: number;
     deadline?: string;
-    status?: string;
     notes?: string;
   },
-  currency = "USD",
 ) {
+  // Fetch goal + backing account to get the goal's currency
+  const [existing] = await db
+    .select({ goal: goals, accountCurrency: accounts.currency })
+    .from(goals)
+    .innerJoin(accounts, eq(goals.accountId, accounts.id))
+    .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+    .limit(1);
+  if (!existing) throw new Error("Goal not found");
+
+  const goalCurrency = existing.accountCurrency;
+
   const values: Partial<typeof goals.$inferInsert> = {};
   if (updates.name !== undefined) values.name = updates.name;
   if (updates.targetAmount !== undefined)
-    values.targetAmount = toMinorUnits(updates.targetAmount);
+    values.targetAmount = toMinorUnits(updates.targetAmount, goalCurrency);
   if (updates.deadline !== undefined) values.deadline = updates.deadline;
-  if (updates.status !== undefined) values.status = updates.status;
   if (updates.notes !== undefined) values.notes = updates.notes;
 
   const [updated] = await db
@@ -84,7 +99,7 @@ export async function updateGoal(
   if (!updated) throw new Error("Goal not found");
 
   const balances = await getAccountBalances([updated.accountId]);
-  return formatGoal(updated, balances.get(updated.accountId) ?? 0n, currency);
+  return formatGoal(updated, balances.get(updated.accountId) ?? 0n, goalCurrency);
 }
 
 // ── Read ──────────────────────────────────────────────────────────────────
@@ -93,98 +108,115 @@ export interface GoalWithProgress {
   id: string;
   name: string;
   accountId: string;
+  currency: string;
   targetAmount: number;
   targetAmountFormatted: string;
   currentAmount: number;
   currentAmountFormatted: string;
   progressPercent: number;
   deadline: string | null;
-  status: string;
   notes: string | null;
   createdAt: Date;
 }
 
 export interface GoalFilters {
-  /** Only show completed goals whose deadline falls in this month (YYYY-MM). Active/paused always included. */
+  /** Only show completed goals whose deadline falls in this month (YYYY-MM). */
   deadlineMonth?: string;
-  status?: string;
-  currency?: string;
 }
 
 export async function getGoals(
   userId: string,
   filters?: GoalFilters,
 ): Promise<GoalWithProgress[]> {
-  const conditions = [eq(goals.userId, userId)];
-  if (filters?.status) conditions.push(eq(goals.status, filters.status));
-
   const rows = await db
-    .select()
+    .select({ goal: goals, accountCurrency: accounts.currency })
     .from(goals)
-    .where(and(...conditions))
+    .innerJoin(accounts, eq(goals.accountId, accounts.id))
+    .where(eq(goals.userId, userId))
     .orderBy(goals.createdAt);
 
-  // Active/paused goals always show. Completed goals only show in their deadline month.
+  // Filter completed goals by deadline month if specified
   const filtered = filters?.deadlineMonth
-    ? rows.filter((g) => {
-        if (g.status !== "completed") return true;
-        if (!g.deadline) return true;
-        return g.deadline.startsWith(filters.deadlineMonth!);
+    ? rows.filter((r) => {
+        if (!r.goal.deadline) return true;
+        return r.goal.deadline.startsWith(filters.deadlineMonth!);
       })
     : rows;
 
   if (filtered.length === 0) return [];
 
-  const currency = filters?.currency ?? "USD";
-  const balances = await getAccountBalances(filtered.map((g) => g.accountId));
-  return filtered.map((g) => formatGoal(g, balances.get(g.accountId) ?? 0n, currency));
+  const balances = await getAccountBalances(filtered.map((r) => r.goal.accountId));
+  return filtered.map((r) =>
+    formatGoal(r.goal, balances.get(r.goal.accountId) ?? 0n, r.accountCurrency),
+  );
 }
 
 export async function getGoalById(
   goalId: string,
   userId: string,
-  currency = "USD",
 ): Promise<GoalWithProgress | null> {
-  const [goal] = await db
-    .select()
+  const [row] = await db
+    .select({ goal: goals, accountCurrency: accounts.currency })
     .from(goals)
+    .innerJoin(accounts, eq(goals.accountId, accounts.id))
     .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
     .limit(1);
 
-  if (!goal) return null;
+  if (!row) return null;
 
-  const balances = await getAccountBalances([goal.accountId]);
-  return formatGoal(goal, balances.get(goal.accountId) ?? 0n, currency);
+  const balances = await getAccountBalances([row.goal.accountId]);
+  return formatGoal(row.goal, balances.get(row.goal.accountId) ?? 0n, row.accountCurrency);
 }
 
-/** Total balance across all goal accounts in major units. Used for net worth. */
-export async function getGoalsTotalBalance(userId: string): Promise<number> {
+/**
+ * Total balance across all goal accounts, converted to baseCurrency.
+ * Used for net worth calculation.
+ */
+export async function getGoalsTotalBalance(
+  userId: string,
+  baseCurrency = "USD",
+): Promise<number> {
   const rows = await db
-    .select({ accountId: goals.accountId })
+    .select({ accountId: goals.accountId, currency: accounts.currency })
     .from(goals)
+    .innerJoin(accounts, eq(goals.accountId, accounts.id))
     .where(eq(goals.userId, userId));
 
   if (rows.length === 0) return 0;
 
   const balances = await getAccountBalances(rows.map((r) => r.accountId));
-  let total = 0n;
-  for (const b of balances.values()) total += b;
-  return toMajorUnits(total);
+
+  const needsConversion = rows.some((r) => r.currency !== baseCurrency);
+  const rates = needsConversion ? await getRates() : null;
+
+  let total = 0;
+  for (const row of rows) {
+    const balance = balances.get(row.accountId) ?? 0n;
+    const major = toMajorUnits(balance, row.currency);
+    if (row.currency === baseCurrency) {
+      total += major;
+    } else {
+      total += convert(major, row.currency, baseCurrency, rates!);
+    }
+  }
+  return total;
 }
 
 // ── Fund / Withdraw ───────────────────────────────────────────────────────
 
 /**
  * Transfer money from a user account into a goal.
- * Journal entry: debit goal account (money arrives), credit source account (money leaves).
+ * If the source account has a different currency than the goal,
+ * this is a cross-currency transfer.
  */
 export async function fundGoal(
   goalId: string,
   userId: string,
   sourceAccountId: string,
-  amount: number, // major units, positive
+  amount: number, // major units in source account's currency, positive
   date: string,
-  currency = "USD",
+  creditAmount?: number, // major units in goal's currency — for cross-currency
+  exchangeRate?: number, // source currency → goal currency conversion rate
 ) {
   if (amount <= 0) throw new Error("Amount must be positive");
 
@@ -196,15 +228,59 @@ export async function fundGoal(
       .limit(1);
     if (!goal) throw new Error("Goal not found");
 
-    // Verify the source account belongs to this user
+    // Get both accounts with currencies
     const [srcAccount] = await tx
-      .select({ id: accounts.id })
+      .select({ id: accounts.id, currency: accounts.currency })
       .from(accounts)
       .where(and(eq(accounts.id, sourceAccountId), eq(accounts.userId, userId)))
       .limit(1);
     if (!srcAccount) throw new Error("Source account not found");
 
-    const minorAmount = toMinorUnits(amount);
+    const [goalAccount] = await tx
+      .select({ id: accounts.id, currency: accounts.currency })
+      .from(accounts)
+      .where(eq(accounts.id, goal.accountId))
+      .limit(1);
+
+    const srcCurrency = srcAccount.currency;
+    const goalCurrency = goalAccount!.currency;
+
+    let srcMinor: bigint;
+    let goalMinor: bigint;
+
+    if (srcCurrency === goalCurrency) {
+      // Same currency — straightforward
+      srcMinor = toMinorUnits(amount, srcCurrency);
+      goalMinor = srcMinor;
+    } else {
+      // Cross-currency: apply 2-of-3 resolution (amount, creditAmount, exchangeRate)
+      const hasAmount = amount > 0;
+      const hasCreditAmount = creditAmount !== undefined && creditAmount > 0;
+      const hasRate = exchangeRate !== undefined && exchangeRate > 0;
+
+      let resolvedAmount = hasAmount ? Math.abs(amount) : 0;
+      let resolvedCreditAmount = hasCreditAmount ? Math.abs(creditAmount!) : 0;
+
+      if (hasAmount && hasCreditAmount) {
+        // Both amounts provided — use them directly (ignore rate if present)
+      } else if (hasAmount && hasRate) {
+        // Compute creditAmount from amount * exchangeRate
+        resolvedCreditAmount = resolvedAmount * exchangeRate!;
+      } else if (hasCreditAmount && hasRate) {
+        // Compute amount from creditAmount / exchangeRate
+        resolvedAmount = resolvedCreditAmount / exchangeRate!;
+      } else {
+        throw new Error(
+          "Cross-currency goal funding requires at least two of: amount, creditAmount, exchangeRate. " +
+          `Source account uses ${srcCurrency}, goal uses ${goalCurrency}. ` +
+          "Provide any two of: amount (source currency) + creditAmount (goal currency), " +
+          "amount + exchangeRate, or creditAmount + exchangeRate.",
+        );
+      }
+
+      srcMinor = toMinorUnits(resolvedAmount, srcCurrency);
+      goalMinor = toMinorUnits(resolvedCreditAmount, goalCurrency);
+    }
 
     await createJournalEntry(
       userId,
@@ -212,28 +288,30 @@ export async function fundGoal(
       `Fund goal: ${goal.name}`,
       null,
       [
-        { accountId: goal.accountId, amount: minorAmount }, // debit goal
-        { accountId: sourceAccountId, amount: -minorAmount }, // credit source
+        { accountId: goal.accountId, amount: goalMinor, currency: goalCurrency }, // debit goal
+        { accountId: sourceAccountId, amount: -srcMinor, currency: srcCurrency }, // credit source
       ],
       tx,
     );
 
     const balances = await getAccountBalances([goal.accountId]);
-    return formatGoal(goal, balances.get(goal.accountId) ?? 0n, currency);
+    return formatGoal(goal, balances.get(goal.accountId) ?? 0n, goalCurrency);
   });
 }
 
 /**
  * Withdraw money from a goal back to a user account.
- * Journal entry: debit destination account (money arrives), credit goal account (money leaves).
+ * If the destination account has a different currency than the goal,
+ * this is a cross-currency transfer.
  */
 export async function withdrawFromGoal(
   goalId: string,
   userId: string,
   destinationAccountId: string,
-  amount: number, // major units, positive
+  amount: number, // major units in goal's currency, positive
   date: string,
-  currency = "USD",
+  creditAmount?: number, // major units in destination's currency — for cross-currency
+  exchangeRate?: number, // goal currency → destination currency conversion rate
 ) {
   if (amount <= 0) throw new Error("Amount must be positive");
 
@@ -245,9 +323,8 @@ export async function withdrawFromGoal(
       .limit(1);
     if (!goal) throw new Error("Goal not found");
 
-    // Verify the destination account belongs to this user
     const [dstAccount] = await tx
-      .select({ id: accounts.id })
+      .select({ id: accounts.id, currency: accounts.currency })
       .from(accounts)
       .where(
         and(eq(accounts.id, destinationAccountId), eq(accounts.userId, userId)),
@@ -255,7 +332,51 @@ export async function withdrawFromGoal(
       .limit(1);
     if (!dstAccount) throw new Error("Destination account not found");
 
-    const minorAmount = toMinorUnits(amount);
+    const [goalAccount] = await tx
+      .select({ id: accounts.id, currency: accounts.currency })
+      .from(accounts)
+      .where(eq(accounts.id, goal.accountId))
+      .limit(1);
+
+    const goalCurrency = goalAccount!.currency;
+    const dstCurrency = dstAccount.currency;
+
+    let goalMinor: bigint;
+    let dstMinor: bigint;
+
+    if (goalCurrency === dstCurrency) {
+      // Same currency — straightforward
+      goalMinor = toMinorUnits(amount, goalCurrency);
+      dstMinor = goalMinor;
+    } else {
+      // Cross-currency: apply 2-of-3 resolution (amount, creditAmount, exchangeRate)
+      const hasAmount = amount > 0;
+      const hasCreditAmount = creditAmount !== undefined && creditAmount > 0;
+      const hasRate = exchangeRate !== undefined && exchangeRate > 0;
+
+      let resolvedAmount = hasAmount ? Math.abs(amount) : 0;
+      let resolvedCreditAmount = hasCreditAmount ? Math.abs(creditAmount!) : 0;
+
+      if (hasAmount && hasCreditAmount) {
+        // Both amounts provided — use them directly (ignore rate if present)
+      } else if (hasAmount && hasRate) {
+        // Compute creditAmount from amount * exchangeRate
+        resolvedCreditAmount = resolvedAmount * exchangeRate!;
+      } else if (hasCreditAmount && hasRate) {
+        // Compute amount from creditAmount / exchangeRate
+        resolvedAmount = resolvedCreditAmount / exchangeRate!;
+      } else {
+        throw new Error(
+          "Cross-currency goal withdrawal requires at least two of: amount, creditAmount, exchangeRate. " +
+          `Goal uses ${goalCurrency}, destination account uses ${dstCurrency}. ` +
+          "Provide any two of: amount (goal currency) + creditAmount (destination currency), " +
+          "amount + exchangeRate, or creditAmount + exchangeRate.",
+        );
+      }
+
+      goalMinor = toMinorUnits(resolvedAmount, goalCurrency);
+      dstMinor = toMinorUnits(resolvedCreditAmount, dstCurrency);
+    }
 
     await createJournalEntry(
       userId,
@@ -263,14 +384,138 @@ export async function withdrawFromGoal(
       `Withdraw from goal: ${goal.name}`,
       null,
       [
-        { accountId: destinationAccountId, amount: minorAmount }, // debit destination
-        { accountId: goal.accountId, amount: -minorAmount }, // credit goal
+        { accountId: destinationAccountId, amount: dstMinor, currency: dstCurrency }, // debit destination
+        { accountId: goal.accountId, amount: -goalMinor, currency: goalCurrency }, // credit goal
       ],
       tx,
     );
 
     const balances = await getAccountBalances([goal.accountId]);
-    return formatGoal(goal, balances.get(goal.accountId) ?? 0n, currency);
+    return formatGoal(goal, balances.get(goal.accountId) ?? 0n, goalCurrency);
+  });
+}
+
+// ── Batch ────────────────────────────────────────────────────────────────
+
+export interface BatchFundGoalItem {
+  goalId: string;
+  sourceAccountId: string;
+  amount: number; // major units, positive
+  date: string;
+}
+
+/**
+ * Fund multiple goals in a single DB transaction (all-or-nothing).
+ * Returns total amount funded.
+ */
+export async function batchFundGoals(
+  userId: string,
+  items: BatchFundGoalItem[],
+): Promise<{ count: number }> {
+  if (items.length === 0) throw new Error("No items to process");
+  if (items.length > 20) throw new Error("Maximum 20 items per batch");
+
+  return db.transaction(async (tx: Tx) => {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        if (item.amount <= 0) throw new Error("Amount must be positive");
+
+        const [goal] = await tx
+          .select()
+          .from(goals)
+          .where(and(eq(goals.id, item.goalId), eq(goals.userId, userId)))
+          .limit(1);
+        if (!goal) throw new Error("Goal not found");
+
+        const [srcAccount] = await tx
+          .select({ id: accounts.id, currency: accounts.currency })
+          .from(accounts)
+          .where(and(eq(accounts.id, item.sourceAccountId), eq(accounts.userId, userId)))
+          .limit(1);
+        if (!srcAccount) throw new Error("Source account not found");
+
+        const [goalAccount] = await tx
+          .select({ id: accounts.id, currency: accounts.currency })
+          .from(accounts)
+          .where(eq(accounts.id, goal.accountId))
+          .limit(1);
+
+        const srcCurrency = srcAccount.currency;
+        const goalCurrency = goalAccount!.currency;
+        const srcMinor = toMinorUnits(item.amount, srcCurrency);
+
+        let goalMinor: bigint;
+        if (srcCurrency === goalCurrency) {
+          goalMinor = srcMinor;
+        } else {
+          const rates = await getRates();
+          const goalMajor = convert(item.amount, srcCurrency, goalCurrency, rates);
+          goalMinor = toMinorUnits(goalMajor, goalCurrency);
+        }
+
+        await createJournalEntry(
+          userId,
+          item.date,
+          `Fund goal: ${goal.name}`,
+          null,
+          [
+            { accountId: goal.accountId, amount: goalMinor, currency: goalCurrency },
+            { accountId: item.sourceAccountId, amount: -srcMinor, currency: srcCurrency },
+          ],
+          tx,
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Operation failed";
+        throw new Error(`Item ${i}: ${msg}`);
+      }
+    }
+
+    return { count: items.length };
+  });
+}
+
+/**
+ * Create multiple goals in a single DB transaction (all-or-nothing).
+ */
+export async function batchCreateGoals(
+  inputs: CreateGoalInput[],
+): Promise<{ count: number }> {
+  if (inputs.length === 0) throw new Error("No goals to create");
+  if (inputs.length > 20) throw new Error("Maximum 20 goals per batch");
+
+  return db.transaction(async (tx: Tx) => {
+    for (let i = 0; i < inputs.length; i++) {
+      const input = inputs[i];
+      try {
+        const goalCurrency = input.currency ?? "USD";
+
+        const [account] = await tx
+          .insert(accounts)
+          .values({
+            userId: input.userId,
+            name: `Goal: ${input.name}`,
+            type: "asset",
+            currency: goalCurrency,
+          })
+          .returning();
+
+        await tx.insert(goals).values({
+          userId: input.userId,
+          accountId: account.id,
+          name: input.name,
+          targetAmount: toMinorUnits(input.targetAmount, goalCurrency),
+          deadline: input.deadline ?? null,
+          notes: input.notes ?? null,
+        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Operation failed";
+        if (msg.startsWith("Item ")) throw error;
+        throw new Error(`Item ${i}: ${msg}`);
+      }
+    }
+
+    return { count: inputs.length };
   });
 }
 
@@ -289,13 +534,13 @@ function formatGoal(goal: GoalRow, balance: bigint, currency = "USD"): GoalWithP
     id: goal.id,
     name: goal.name,
     accountId: goal.accountId,
-    targetAmount: toMajorUnits(targetMinor),
+    currency,
+    targetAmount: toMajorUnits(targetMinor, currency),
     targetAmountFormatted: formatMoney(targetMinor, currency),
-    currentAmount: toMajorUnits(balance),
+    currentAmount: toMajorUnits(balance, currency),
     currentAmountFormatted: formatMoney(balance, currency),
     progressPercent,
     deadline: goal.deadline,
-    status: goal.status,
     notes: goal.notes,
     createdAt: goal.createdAt,
   };

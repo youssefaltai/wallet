@@ -19,19 +19,20 @@ export interface Category {
   id: string;
   name: string;
   type: "expense" | "income";
+  currency: string;
 }
 
 type CategoryType = Category["type"];
 
-function toCategory(row: { id: string; name: string; type: string }): Category {
-  return { id: row.id, name: row.name, type: row.type as CategoryType };
+function toCategory(row: { id: string; name: string; type: string; currency: string }): Category {
+  return { id: row.id, name: row.name, type: row.type as CategoryType, currency: row.currency };
 }
 
 export async function getExpenseCategories(
   userId: string,
 ): Promise<Category[]> {
   const rows = await db
-    .select({ id: accounts.id, name: accounts.name, type: accounts.type })
+    .select({ id: accounts.id, name: accounts.name, type: accounts.type, currency: accounts.currency })
     .from(accounts)
     .where(and(eq(accounts.userId, userId), eq(accounts.type, "expense")))
     .orderBy(asc(accounts.name));
@@ -40,7 +41,7 @@ export async function getExpenseCategories(
 
 export async function getIncomeCategories(userId: string): Promise<Category[]> {
   const rows = await db
-    .select({ id: accounts.id, name: accounts.name, type: accounts.type })
+    .select({ id: accounts.id, name: accounts.name, type: accounts.type, currency: accounts.currency })
     .from(accounts)
     .where(and(eq(accounts.userId, userId), eq(accounts.type, "income")))
     .orderBy(asc(accounts.name));
@@ -53,7 +54,7 @@ export async function getCategoryByName(
   type: CategoryType,
 ): Promise<Category | null> {
   const [row] = await db
-    .select({ id: accounts.id, name: accounts.name, type: accounts.type })
+    .select({ id: accounts.id, name: accounts.name, type: accounts.type, currency: accounts.currency })
     .from(accounts)
     .where(
       and(
@@ -71,8 +72,9 @@ export async function createCategory(
   userId: string,
   name: string,
   type: CategoryType,
+  currency: string,
 ): Promise<Category> {
-  const account = await getOrCreateAccount(userId, name, type);
+  const account = await getOrCreateAccount(userId, name, type, currency);
   return toCategory(account);
 }
 
@@ -129,9 +131,10 @@ export async function resolveCategory(
   userId: string,
   name: string,
   type: CategoryType,
+  currency: string,
   tx?: Tx,
 ): Promise<Category> {
-  const account = await getOrCreateAccount(userId, name, type, tx);
+  const account = await getOrCreateAccount(userId, name, type, currency, tx);
   return toCategory(account);
 }
 
@@ -168,12 +171,14 @@ export async function getCategoryTotals(
     id: string;
     name: string;
     type: string;
+    currency: string;
     total: string;
   }>(sql`
     SELECT
       a.id,
       a.name,
       a.type,
+      a.currency,
       ${amountExpr}::text AS total
     FROM accounts a
     LEFT JOIN journal_lines jl
@@ -184,7 +189,7 @@ export async function getCategoryTotals(
       AND je.date < ${endDate}
     WHERE a.user_id = ${userId}
       AND a.type = ${type}
-    GROUP BY a.id, a.name, a.type
+    GROUP BY a.id, a.name, a.type, a.currency
     ORDER BY total DESC
   `);
 
@@ -192,8 +197,8 @@ export async function getCategoryTotals(
     const totalMinor = BigInt(row.total);
     return {
       ...toCategory(row),
-      total: toMajorUnits(totalMinor),
-      totalFormatted: formatMoney(totalMinor, currency),
+      total: toMajorUnits(totalMinor, row.currency),
+      totalFormatted: formatMoney(totalMinor, row.currency),
     };
   });
 }

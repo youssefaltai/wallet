@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toolCardRegistry } from "./tool-cards";
-import { friendlyNames, completedNames } from "@/lib/constants/tool-labels";
+import { friendlyNames, completedNames, failedNames } from "@/lib/constants/tool-labels";
 import { UserAvatar } from "@/components/shared/user-avatar";
 
 interface ChatMessageProps {
@@ -81,7 +81,7 @@ function MessagePart({
     );
   }
 
-  // Tool invocation parts have type like "tool-get_accounts", "tool-create_transaction", etc.
+  // Tool invocation parts have type like "tool-get_accounts", "tool-record_expense", etc.
   if (part.type.startsWith("tool-")) {
     const toolPart = part as {
       type: string;
@@ -145,9 +145,11 @@ function ToolInvocationDisplay({
   const completedName = completedNames[toolName] ?? displayName;
 
   if (!success) {
+    const failedName = failedNames[toolName] ?? `Failed to complete ${displayName.toLowerCase()}`;
     return (
       <div className="text-xs text-negative flex items-center gap-2 py-1">
-        ✗ {completedName} — failed
+        <span>✗</span>
+        {failedName}
       </div>
     );
   }

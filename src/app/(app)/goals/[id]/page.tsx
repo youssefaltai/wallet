@@ -26,11 +26,11 @@ import { formatDateFull, formatDate } from "@/lib/utils/format-date";
 
 export const metadata: Metadata = { title: "Goal Details | Wallet" };
 
-const statusBadgeVariant: Record<string, "default" | "secondary" | "outline"> = {
-  active: "default",
-  completed: "secondary",
-  paused: "outline",
-};
+function getProgressLabel(percent: number): { label: string; variant: "default" | "secondary" | "outline" } {
+  if (percent >= 100) return { label: "Completed", variant: "secondary" };
+  if (percent > 0) return { label: "In Progress", variant: "default" };
+  return { label: "Not Started", variant: "outline" };
+}
 
 export default async function GoalDetailPage({
   params,
@@ -43,7 +43,7 @@ export default async function GoalDetailPage({
   const { id } = await params;
   const currency = session.user.currency;
 
-  const goal = await getGoalById(id, session.user.id, currency);
+  const goal = await getGoalById(id, session.user.id);
   if (!goal) notFound();
 
   const transactions = await getTransactions({
@@ -69,8 +69,8 @@ export default async function GoalDetailPage({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-xl">{goal.name}</CardTitle>
-            <Badge variant={statusBadgeVariant[goal.status] ?? "outline"}>
-              {goal.status}
+            <Badge variant={getProgressLabel(goal.progressPercent).variant}>
+              {getProgressLabel(goal.progressPercent).label}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-4">

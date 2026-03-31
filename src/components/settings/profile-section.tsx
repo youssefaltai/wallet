@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils/fetcher";
@@ -9,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/shared/user-avatar";
 import { Camera } from "lucide-react";
+import { revalidateAllAction } from "@/app/(app)/actions";
+import { CurrencySelect } from "@/components/shared/currency-select";
 
 interface Profile {
   id: string;
@@ -16,10 +19,12 @@ interface Profile {
   email: string;
   image: string | null;
   emailVerified: boolean;
+  currency: string;
 }
 
 export function ProfileSection() {
   const router = useRouter();
+  const { update: updateSession } = useSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: profile, mutate: mutateProfile } = useSWR<Profile>(
     "/api/settings/profile",
@@ -27,6 +32,7 @@ export function ProfileSection() {
   );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [selectedCurrency, setSelectedCurrency] = useState("USD");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -39,6 +45,7 @@ export function ProfileSection() {
       initialized.current = true;
       setName(profile.name || "");
       setEmail(profile.email || "");
+      setSelectedCurrency(profile.currency || "USD");
     }
   }, [profile]);
 
@@ -50,7 +57,7 @@ export function ProfileSection() {
       const res = await fetch("/api/settings/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify({ name, email, currency: selectedCurrency }),
       });
 
       const data = await res.json();
@@ -71,10 +78,17 @@ export function ProfileSection() {
         return;
       }
 
-      mutateProfile((p) => (p ? { ...p, name, email } : p), {
-        revalidate: false,
-      });
+      mutateProfile(
+        (p) => (p ? { ...p, name, email, currency: selectedCurrency } : p),
+        { revalidate: false },
+      );
+      // Force JWT to re-read currency from DB — passing data ensures a POST
+      // (calling updateSession() with no args makes a GET, which skips the
+      // trigger:"update" path in the JWT callback)
+      await updateSession({});
       setMessage({ type: "success", text: "Profile updated" });
+      // Invalidate every cached route so currency changes propagate app-wide
+      await revalidateAllAction();
       router.refresh();
     } catch {
       setMessage({ type: "error", text: "Failed to save profile" });
@@ -193,14 +207,6 @@ export function ProfileSection() {
         </div>
       </div>
 
-      {message && (
-        <p
-          className={`text-sm ${message.type === "error" ? "text-destructive" : "text-muted-foreground"}`}
-        >
-          {message.text}
-        </p>
-      )}
-
       {/* Name */}
       <div className="space-y-2">
         <Label htmlFor="name">Name</Label>
@@ -228,9 +234,31 @@ export function ProfileSection() {
         )}
       </div>
 
-      <Button onClick={handleSave} disabled={saving}>
-        {saving ? "Saving..." : "Save changes"}
-      </Button>
+      {/* Base Currency */}
+      <div className="space-y-2">
+        <Label htmlFor="currency">Base Currency</Label>
+        <CurrencySelect
+          id="currency"
+          value={selectedCurrency}
+          onChange={setSelectedCurrency}
+        />
+        <p className="text-xs text-muted-foreground">
+          Used for dashboards and reporting. Accounts keep their own currency.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save changes"}
+        </Button>
+        {message && (
+          <p
+            className={`text-sm ${message.type === "error" ? "text-destructive" : "text-muted-foreground"}`}
+          >
+            {message.text}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

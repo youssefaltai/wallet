@@ -1,4 +1,4 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { openai } from "@ai-sdk/openai";
 import { streamText, stepCountIs, convertToModelMessages } from "ai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -6,6 +6,7 @@ import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
 import { createFinancialReadTools } from "@/lib/ai/tools/financial-read";
 import { createFinancialWriteTools } from "@/lib/ai/tools/financial-write";
 import { createMemoryTools } from "@/lib/ai/tools/memory";
+import { createSettingsTools } from "@/lib/ai/tools/settings";
 import {
   getModelMessages,
   createConversation,
@@ -82,6 +83,7 @@ export async function POST(req: Request) {
     ...createFinancialReadTools(userId, currency),
     ...createFinancialWriteTools(userId, currency),
     ...createMemoryTools(userId),
+    ...createSettingsTools(userId),
   };
 
   // Fetch all memories for injection into system context
@@ -129,7 +131,7 @@ export async function POST(req: Request) {
 
 
   const result = streamText({
-    model: anthropic(process.env.AI_MODEL || "claude-sonnet-4-20250514"),
+    model: openai(process.env.AI_MODEL || "gpt-4.1-mini"),
     maxOutputTokens: 8192,
     system: [
       {

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Button } from "@/components/ui/button";
 import { PencilIcon, TrashIcon, CopyIcon } from "lucide-react";
-import { formatDate } from "@/lib/utils/format-date";
+import { formatRelativeDateTime } from "@/lib/utils/format-date";
 import type { TransactionRow } from "@/lib/services/transactions";
 
 export interface TransactionTableProps {
@@ -43,7 +43,7 @@ function RowCells({
   return (
     <>
       <TableCell className="whitespace-nowrap">
-        {formatDate(txn.date)}
+        {formatRelativeDateTime(txn.date)}
       </TableCell>
       <TableCell>
         {txn.description || (

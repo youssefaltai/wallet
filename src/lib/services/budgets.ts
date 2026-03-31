@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { budgets, accounts } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { toMinorUnits, toMajorUnits, formatMoney } from "./money";
+import { resolveCategory } from "./categories";
 
 export interface CreateBudgetInput {
   userId: string;
@@ -16,7 +17,7 @@ export interface CreateBudgetInput {
 export async function createBudget(input: CreateBudgetInput) {
   // Validate that the category is an expense-type account owned by the user
   const [account] = await db
-    .select({ type: accounts.type })
+    .select({ type: accounts.type, currency: accounts.currency })
     .from(accounts)
     .where(and(eq(accounts.id, input.categoryAccountId), eq(accounts.userId, input.userId)))
     .limit(1);
@@ -30,20 +31,30 @@ export async function createBudget(input: CreateBudgetInput) {
     .values({
       userId: input.userId,
       name: input.name,
-      amount: toMinorUnits(input.amount),
+      amount: toMinorUnits(input.amount, account.currency),
       startDate: input.startDate,
       endDate: input.endDate,
       categoryAccountId: input.categoryAccountId,
     })
     .returning();
 
-  const currency = input.currency ?? "USD";
+  const currency = account.currency;
 
   return {
     ...budget,
-    amount: toMajorUnits(budget.amount),
+    amount: toMajorUnits(budget.amount, currency),
     amountFormatted: formatMoney(budget.amount, currency),
   };
+}
+
+export async function deleteBudget(userId: string, budgetId: string) {
+  const [deleted] = await db
+    .delete(budgets)
+    .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)))
+    .returning({ id: budgets.id });
+
+  if (!deleted) throw new Error("Budget not found");
+  return deleted;
 }
 
 export async function updateBudget(
@@ -55,17 +66,28 @@ export async function updateBudget(
     startDate?: string;
     endDate?: string;
     categoryAccountId?: string;
-    isActive?: boolean;
   },
-  currency = "USD",
+  _currency = "USD",
 ) {
+  // Fetch budget with category currency for correct minor-unit conversion
+  const [current] = await db
+    .select({
+      categoryAccountId: budgets.categoryAccountId,
+      categoryAccountCurrency: accounts.currency,
+    })
+    .from(budgets)
+    .leftJoin(accounts, eq(budgets.categoryAccountId, accounts.id))
+    .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)))
+    .limit(1);
+  if (!current) throw new Error("Budget not found");
+  const budgetCurrency = current.categoryAccountCurrency ?? "USD";
+
   const values: Partial<typeof budgets.$inferInsert> = {};
   if (updates.name !== undefined) values.name = updates.name;
   if (updates.amount !== undefined)
-    values.amount = toMinorUnits(updates.amount);
+    values.amount = toMinorUnits(updates.amount, budgetCurrency);
   if (updates.startDate !== undefined) values.startDate = updates.startDate;
   if (updates.endDate !== undefined) values.endDate = updates.endDate;
-  if (updates.isActive !== undefined) values.isActive = updates.isActive;
 
   if (updates.categoryAccountId !== undefined) {
     const [account] = await db
@@ -91,9 +113,88 @@ export async function updateBudget(
 
   return {
     ...updated,
-    amount: toMajorUnits(updated.amount),
-    amountFormatted: formatMoney(updated.amount, currency),
+    amount: toMajorUnits(updated.amount, budgetCurrency),
+    amountFormatted: formatMoney(updated.amount, budgetCurrency),
   };
+}
+
+// ── Batch ────────────────────────────────────────────────────────────────
+
+export interface BatchBudgetItem {
+  amount: number; // major units per month
+  category: string; // category name (auto-resolved)
+  startMonth: string; // "YYYY-MM"
+  months: number; // 1–12
+  nameTemplate?: string; // default: "{month} {category}"
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Create monthly budgets in bulk (all-or-nothing).
+ * Each item expands into `months` individual budgets with correct date ranges.
+ */
+export async function batchCreateBudgets(
+  userId: string,
+  items: BatchBudgetItem[],
+  currency: string,
+): Promise<{ count: number }> {
+  if (items.length === 0) throw new Error("No budgets to create");
+  if (items.length > 20) throw new Error("Maximum 20 items per batch");
+
+  return db.transaction(async (tx) => {
+    let count = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      if (item.months < 1 || item.months > 12) {
+        throw new Error(`Item ${i}: months must be between 1 and 12`);
+      }
+
+      try {
+        const cat = await resolveCategory(userId, item.category, "expense", currency, tx);
+        const template = item.nameTemplate ?? "{month} {category}";
+
+        const [startYear, startMonthNum] = item.startMonth.split("-").map(Number);
+
+        for (let m = 0; m < item.months; m++) {
+          const year = startYear + Math.floor((startMonthNum - 1 + m) / 12);
+          const month = ((startMonthNum - 1 + m) % 12); // 0-indexed
+          const monthName = MONTH_NAMES[month];
+
+          const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+          const lastDay = new Date(year, month + 1, 0).getDate();
+          const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+          const name = template
+            .replace("{month}", monthName)
+            .replace("{category}", item.category);
+
+          await tx.insert(budgets).values({
+            userId,
+            name,
+            amount: toMinorUnits(item.amount, cat.currency),
+            startDate,
+            endDate,
+            categoryAccountId: cat.id,
+          });
+
+          count++;
+        }
+      } catch (error) {
+        // Re-throw with item index if not already prefixed
+        const msg = error instanceof Error ? error.message : "Operation failed";
+        if (msg.startsWith("Item ")) throw error;
+        throw new Error(`Item ${i}: ${msg}`);
+      }
+    }
+
+    return { count };
+  });
 }
 
 export interface BudgetStatus {
@@ -101,6 +202,7 @@ export interface BudgetStatus {
   name: string;
   categoryAccountId: string;
   categoryName: string;
+  currency: string;
   budgetAmount: number;
   budgetAmountFormatted: string;
   spent: number;
@@ -110,24 +212,24 @@ export interface BudgetStatus {
   percentUsed: number;
   startDate: string;
   endDate: string;
-  isActive: boolean;
 }
 
 /** Get a single budget by ID with spent amount computed. */
 export async function getBudgetById(
   budgetId: string,
   userId: string,
-  currency = "USD",
+  _currency = "USD",
 ): Promise<BudgetStatus | null> {
   const rows = await db
-    .select({ budget: budgets, categoryName: accounts.name })
+    .select({ budget: budgets, categoryName: accounts.name, categoryAccountCurrency: accounts.currency })
     .from(budgets)
     .leftJoin(accounts, eq(budgets.categoryAccountId, accounts.id))
     .where(and(eq(budgets.id, budgetId), eq(budgets.userId, userId)))
     .limit(1);
 
   if (rows.length === 0) return null;
-  const { budget, categoryName } = rows[0];
+  const { budget, categoryName, categoryAccountCurrency } = rows[0];
+  const budgetCurrency = categoryAccountCurrency ?? "USD";
 
   // Expenses = positive (debit) journal lines on the category account
   const [result] = await db.execute<{ spent: string }>(sql`
@@ -149,19 +251,19 @@ export async function getBudgetById(
     name: budget.name,
     categoryAccountId: budget.categoryAccountId,
     categoryName: categoryName ?? "",
-    budgetAmount: toMajorUnits(budgetMinor),
-    budgetAmountFormatted: formatMoney(budgetMinor, currency),
-    spent: toMajorUnits(spentMinor),
-    spentFormatted: formatMoney(spentMinor, currency),
-    remaining: toMajorUnits(remainingMinor),
-    remainingFormatted: formatMoney(remainingMinor, currency),
+    currency: budgetCurrency,
+    budgetAmount: toMajorUnits(budgetMinor, budgetCurrency),
+    budgetAmountFormatted: formatMoney(budgetMinor, budgetCurrency),
+    spent: toMajorUnits(spentMinor, budgetCurrency),
+    spentFormatted: formatMoney(spentMinor, budgetCurrency),
+    remaining: toMajorUnits(remainingMinor, budgetCurrency),
+    remainingFormatted: formatMoney(remainingMinor, budgetCurrency),
     percentUsed:
       budgetMinor === 0n
         ? 0
         : Math.round((Number(spentMinor) / Number(budgetMinor)) * 100),
     startDate: budget.startDate,
     endDate: budget.endDate,
-    isActive: budget.isActive,
   };
 }
 
@@ -170,7 +272,7 @@ export interface BudgetDateRange {
   endDate: string;
 }
 
-/** Get existing budget date ranges for a category (active budgets only). */
+/** Get existing budget date ranges for a category. */
 export async function getBudgetDateRanges(
   userId: string,
   categoryAccountId: string,
@@ -179,7 +281,6 @@ export async function getBudgetDateRanges(
   const conditions = [
     eq(budgets.userId, userId),
     eq(budgets.categoryAccountId, categoryAccountId),
-    eq(budgets.isActive, true),
   ];
 
   if (excludeBudgetId) {
@@ -214,7 +315,7 @@ export async function getBudgetStatuses(
   }
 
   const rows = await db
-    .select({ budget: budgets, categoryName: accounts.name })
+    .select({ budget: budgets, categoryName: accounts.name, categoryAccountCurrency: accounts.currency })
     .from(budgets)
     .leftJoin(accounts, eq(budgets.categoryAccountId, accounts.id))
     .where(and(...budgetConditions))
@@ -246,10 +347,9 @@ export async function getBudgetStatuses(
     WHERE je.user_id = ${userId}
   `);
 
-  const currency = filters?.currency ?? "USD";
-
   return rows.map((r, i) => {
     const b = r.budget;
+    const budgetCurrency = r.categoryAccountCurrency ?? "USD";
     const spentMinor = BigInt(spentRow?.[`spent_${i}`] ?? "0");
     const budgetMinor = b.amount;
     const remainingMinor = budgetMinor - spentMinor;
@@ -259,19 +359,19 @@ export async function getBudgetStatuses(
       name: b.name,
       categoryAccountId: b.categoryAccountId,
       categoryName: r.categoryName ?? "",
-      budgetAmount: toMajorUnits(budgetMinor),
-      budgetAmountFormatted: formatMoney(budgetMinor, currency),
-      spent: toMajorUnits(spentMinor),
-      spentFormatted: formatMoney(spentMinor, currency),
-      remaining: toMajorUnits(remainingMinor),
-      remainingFormatted: formatMoney(remainingMinor, currency),
+      currency: budgetCurrency,
+      budgetAmount: toMajorUnits(budgetMinor, budgetCurrency),
+      budgetAmountFormatted: formatMoney(budgetMinor, budgetCurrency),
+      spent: toMajorUnits(spentMinor, budgetCurrency),
+      spentFormatted: formatMoney(spentMinor, budgetCurrency),
+      remaining: toMajorUnits(remainingMinor, budgetCurrency),
+      remainingFormatted: formatMoney(remainingMinor, budgetCurrency),
       percentUsed:
         budgetMinor === 0n
           ? 0
           : Math.round((Number(spentMinor) / Number(budgetMinor)) * 100),
       startDate: b.startDate,
       endDate: b.endDate,
-      isActive: b.isActive,
     };
   });
 }

@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCategoryAction } from "@/app/(app)/actions";
+import { CurrencySelect } from "@/components/shared/currency-select";
 
 export function CreateCategoryDialog({
   open,
@@ -61,6 +62,10 @@ export function CreateCategoryDialog({
               required
               autoFocus
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`new-${type}-currency`}>Currency</Label>
+            <CurrencySelect id={`new-${type}-currency`} />
           </div>
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "Creating..." : "Create"}

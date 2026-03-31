@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useErrorDialog } from "@/hooks/use-error-dialog";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
+import { useCrossCurrency } from "@/hooks/use-cross-currency";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +17,8 @@ import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
+import { CrossCurrencyFields } from "@/components/shared/cross-currency-fields";
 import {
   Select,
   SelectContent,
@@ -104,12 +107,16 @@ function GroupedAccountSelect({
   defaultValue,
   placeholder,
   showBalance,
+  value,
+  onValueChange,
 }: {
   accounts: AccountWithBalance[];
   name: string;
   defaultValue?: string;
   placeholder: string;
   showBalance?: boolean;
+  value?: string;
+  onValueChange?: (value: string) => void;
 }) {
   const assetAccounts = accounts.filter((a) => a.type === "asset");
   const liabilityAccounts = accounts.filter((a) => a.type === "liability");
@@ -119,7 +126,20 @@ function GroupedAccountSelect({
     showBalance ? `${a.name} (${a.balanceFormatted})` : a.name;
 
   return (
-    <Select name={name} required defaultValue={defaultValue ?? allAccounts[0]?.id}>
+    <Select
+      name={name}
+      required
+      {...(value !== undefined
+        ? {
+            value,
+            onValueChange: onValueChange
+              ? (val: string | null | undefined) => {
+                  if (val) onValueChange(val);
+                }
+              : undefined,
+          }
+        : { defaultValue: defaultValue ?? allAccounts[0]?.id })}
+    >
       <SelectTrigger className="w-full">
         <SelectValue placeholder={placeholder}>
           {(value: string) => {
@@ -167,16 +187,20 @@ function CategorySelect({
   label,
   type,
   defaultValue,
+  value,
   onCreated,
   onError,
+  onValueChange,
 }: {
   categories: Category[];
   name: string;
   label: string;
   type: "expense" | "income";
   defaultValue?: string;
+  value?: string;
   onCreated?: (cat: Category) => void;
   onError: (msg: string) => void;
+  onValueChange?: (value: string) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -209,7 +233,7 @@ function CategorySelect({
                 return;
               }
               if (result?.id) {
-                onCreated?.({ id: result.id, name: newName.trim(), type });
+                onCreated?.({ id: result.id, name: newName.trim(), type, currency: result.currency ?? "USD" });
               }
               setCreating(false);
               setNewName("");
@@ -236,7 +260,23 @@ function CategorySelect({
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Select name={name} required defaultValue={defaultValue ?? categories[0]?.id}>
+      <Select
+        name={name}
+        required
+        {...(value !== undefined
+          ? {
+              value,
+              onValueChange: onValueChange
+                ? (val: string | null | undefined) => { if (val) onValueChange(val); }
+                : undefined,
+            }
+          : {
+              defaultValue: defaultValue ?? categories[0]?.id,
+              onValueChange: onValueChange
+                ? (val: string | null | undefined) => { if (val) onValueChange(val); }
+                : undefined,
+            })}
+      >
         <SelectTrigger className="w-full">
           <SelectValue placeholder={`Select ${label.toLowerCase()}`}>
             {(value: string) => {
@@ -269,6 +309,50 @@ function CategorySelect({
   );
 }
 
+function nowDate() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function nowTime() {
+  const now = new Date();
+  return `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+}
+
+function combineDatetime(date: string, time: string): string {
+  return new Date(`${date}T${time}`).toISOString();
+}
+
+function DateTimeFields({ prefix }: { prefix: string }) {
+  const [date, setDate] = useState(nowDate);
+  const [time, setTime] = useState(nowTime);
+
+  return (
+    <>
+      <input type="hidden" name="date" value={combineDatetime(date, time)} />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-date`}>Date</Label>
+          <DatePicker
+            id={`${prefix}-date`}
+            value={date}
+            onChange={(d) => setDate(d)}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-time`}>Time</Label>
+          <TimePicker
+            id={`${prefix}-time`}
+            value={time}
+            onChange={(t) => setTime(t)}
+            required
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ExpenseForm({
   accounts,
   categories: initialCategories,
@@ -285,6 +369,26 @@ function ExpenseForm({
   const [submitting, setSubmitting] = useState(false);
   const [categories, setCategories] = useState(initialCategories);
 
+  const allAccounts = [
+    ...accounts.filter((a) => a.type === "asset"),
+    ...accounts.filter((a) => a.type === "liability"),
+  ];
+  const [accountId, setAccountId] = useState(allAccounts[0]?.id ?? "");
+  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+
+  const selectedAccount = allAccounts.find((a) => a.id === accountId);
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const isCrossCurrency =
+    selectedAccount != null &&
+    selectedCategory != null &&
+    selectedAccount.currency !== selectedCategory.currency;
+  // Expense: debit=category, credit=account
+  // amount field = debit side (category currency), creditAmount = credit side (account currency)
+  const srcCurrency = selectedCategory?.currency ?? "USD";
+  const dstCurrency = selectedAccount?.currency ?? "USD";
+
+  const fx = useCrossCurrency(isCrossCurrency, srcCurrency, dstCurrency);
+
   if (categories.length === 0) {
     return (
       <div className="space-y-4">
@@ -296,7 +400,10 @@ function ExpenseForm({
           name="categoryAccountId"
           label="Category"
           type="expense"
-          onCreated={(cat) => setCategories((prev) => [...prev, cat])}
+          onCreated={(cat) => {
+            setCategories((prev) => [...prev, cat]);
+            setCategoryId(cat.id);
+          }}
           onError={onError}
         />
         <Button type="button" variant="outline" onClick={onBack}>
@@ -311,6 +418,17 @@ function ExpenseForm({
       action={async (formData) => {
         setSubmitting(true);
         formData.set("direction", "expense");
+        formData.set("accountId", accountId);
+        formData.set("categoryAccountId", categoryId);
+        if (isCrossCurrency) {
+          formData.set("amount", fx.amount);
+          if (fx.parsed.creditAmount !== undefined) {
+            formData.set("creditAmount", fx.parsed.creditAmount.toString());
+          }
+          if (fx.parsed.exchangeRate !== undefined) {
+            formData.set("exchangeRate", fx.parsed.exchangeRate.toString());
+          }
+        }
         const result = await createTransactionAction(formData);
         setSubmitting(false);
         if (result?.error) {
@@ -328,6 +446,11 @@ function ExpenseForm({
           name="accountId"
           placeholder="Select account"
           showBalance
+          value={accountId}
+          onValueChange={(val) => {
+            setAccountId(val);
+            fx.reset();
+          }}
         />
       </div>
       <CategorySelect
@@ -335,18 +458,39 @@ function ExpenseForm({
         name="categoryAccountId"
         label="Category"
         type="expense"
-        onCreated={(cat) => setCategories((prev) => [...prev, cat])}
+        value={categoryId}
+        onCreated={(cat) => {
+          setCategories((prev) => [...prev, cat]);
+          setCategoryId(cat.id);
+        }}
         onError={onError}
+        onValueChange={(val) => {
+          setCategoryId(val);
+          fx.reset();
+        }}
       />
-      <div className="space-y-2">
-        <Label htmlFor="expense-amount">Amount</Label>
-        <MoneyInput
-          id="expense-amount"
-          name="amount"
-          placeholder="0.00"
-          required
+
+      {isCrossCurrency ? (
+        <CrossCurrencyFields
+          state={fx}
+          sourceCurrency={srcCurrency}
+          destCurrency={dstCurrency}
+          idPrefix="expense"
         />
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="expense-amount">Amount</Label>
+          <MoneyInput
+            id="expense-amount"
+            name="amount"
+            placeholder="0.00"
+            value={fx.amount}
+            onChange={fx.handleAmountChange}
+            required
+          />
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="expense-description">Description (optional)</Label>
         <Input
@@ -355,15 +499,7 @@ function ExpenseForm({
           placeholder="e.g. Grocery store"
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="expense-date">Date</Label>
-        <DatePicker
-          id="expense-date"
-          name="date"
-          required
-          defaultValue={new Date().toISOString().split("T")[0]}
-        />
-      </div>
+      <DateTimeFields prefix="expense" />
       <div className="space-y-2">
         <Label htmlFor="expense-notes">Notes (optional)</Label>
         <Textarea
@@ -402,6 +538,22 @@ function IncomeForm({
   const [categories, setCategories] = useState(initialCategories);
   const depositAccounts = accounts.filter((a) => a.type === "asset");
 
+  const [accountId, setAccountId] = useState(depositAccounts[0]?.id ?? "");
+  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+
+  const selectedAccount = depositAccounts.find((a) => a.id === accountId);
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const isCrossCurrency =
+    selectedAccount != null &&
+    selectedCategory != null &&
+    selectedAccount.currency !== selectedCategory.currency;
+  // Income: debit=account, credit=category
+  // amount field = debit side (account currency), creditAmount = credit side (category currency)
+  const srcCurrency = selectedAccount?.currency ?? "USD";
+  const dstCurrency = selectedCategory?.currency ?? "USD";
+
+  const fx = useCrossCurrency(isCrossCurrency, srcCurrency, dstCurrency);
+
   if (depositAccounts.length === 0) {
     return (
       <div className="space-y-4">
@@ -426,7 +578,10 @@ function IncomeForm({
           name="categoryAccountId"
           label="Source"
           type="income"
-          onCreated={(cat) => setCategories((prev) => [...prev, cat])}
+          onCreated={(cat) => {
+            setCategories((prev) => [...prev, cat]);
+            setCategoryId(cat.id);
+          }}
           onError={onError}
         />
         <Button type="button" variant="outline" onClick={onBack}>
@@ -441,6 +596,17 @@ function IncomeForm({
       action={async (formData) => {
         setSubmitting(true);
         formData.set("direction", "income");
+        formData.set("accountId", accountId);
+        formData.set("categoryAccountId", categoryId);
+        if (isCrossCurrency) {
+          formData.set("amount", fx.amount);
+          if (fx.parsed.creditAmount !== undefined) {
+            formData.set("creditAmount", fx.parsed.creditAmount.toString());
+          }
+          if (fx.parsed.exchangeRate !== undefined) {
+            formData.set("exchangeRate", fx.parsed.exchangeRate.toString());
+          }
+        }
         const result = await createTransactionAction(formData);
         setSubmitting(false);
         if (result?.error) {
@@ -453,7 +619,17 @@ function IncomeForm({
     >
       <div className="space-y-2">
         <Label>Deposit to</Label>
-        <Select name="accountId" required defaultValue={depositAccounts[0]?.id}>
+        <Select
+          name="accountId"
+          required
+          value={accountId}
+          onValueChange={(val: string | null | undefined) => {
+            if (val) {
+              setAccountId(val);
+              fx.reset();
+            }
+          }}
+        >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select account">
               {(value: string) => {
@@ -478,18 +654,39 @@ function IncomeForm({
         name="categoryAccountId"
         label="Source"
         type="income"
-        onCreated={(cat) => setCategories((prev) => [...prev, cat])}
+        value={categoryId}
+        onCreated={(cat) => {
+          setCategories((prev) => [...prev, cat]);
+          setCategoryId(cat.id);
+        }}
         onError={onError}
+        onValueChange={(val) => {
+          setCategoryId(val);
+          fx.reset();
+        }}
       />
-      <div className="space-y-2">
-        <Label htmlFor="income-amount">Amount</Label>
-        <MoneyInput
-          id="income-amount"
-          name="amount"
-          placeholder="0.00"
-          required
+
+      {isCrossCurrency ? (
+        <CrossCurrencyFields
+          state={fx}
+          sourceCurrency={srcCurrency}
+          destCurrency={dstCurrency}
+          idPrefix="income"
         />
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="income-amount">Amount</Label>
+          <MoneyInput
+            id="income-amount"
+            name="amount"
+            placeholder="0.00"
+            value={fx.amount}
+            onChange={fx.handleAmountChange}
+            required
+          />
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="income-description">Description (optional)</Label>
         <Input
@@ -498,15 +695,7 @@ function IncomeForm({
           placeholder="e.g. March paycheck"
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="income-date">Date</Label>
-        <DatePicker
-          id="income-date"
-          name="date"
-          required
-          defaultValue={new Date().toISOString().split("T")[0]}
-        />
-      </div>
+      <DateTimeFields prefix="income" />
       <div className="space-y-2">
         <Label htmlFor="income-notes">Notes (optional)</Label>
         <Textarea
@@ -540,6 +729,23 @@ function TransferForm({
   onError: (message: string) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const allAccounts = [
+    ...accounts.filter((a) => a.type === "asset"),
+    ...accounts.filter((a) => a.type === "liability"),
+  ];
+  const [fromAccountId, setFromAccountId] = useState(allAccounts[0]?.id ?? "");
+  const [toAccountId, setToAccountId] = useState(
+    allAccounts.length > 1 ? allAccounts[1].id : allAccounts[0]?.id ?? "",
+  );
+
+  const fromAccount = allAccounts.find((a) => a.id === fromAccountId);
+  const toAccount = allAccounts.find((a) => a.id === toAccountId);
+  const isCrossCurrency =
+    fromAccount != null && toAccount != null && fromAccount.currency !== toAccount.currency;
+  const srcCurrency = fromAccount?.currency ?? "USD";
+  const dstCurrency = toAccount?.currency ?? "USD";
+
+  const fx = useCrossCurrency(isCrossCurrency, srcCurrency, dstCurrency);
 
   if (accounts.length < 2) {
     return (
@@ -557,6 +763,18 @@ function TransferForm({
   return (
     <form
       action={async (formData) => {
+        // Inject controlled values into the form data
+        formData.set("fromAccountId", fromAccountId);
+        formData.set("toAccountId", toAccountId);
+        formData.set("amount", fx.amount);
+        if (isCrossCurrency) {
+          if (fx.parsed.creditAmount !== undefined) {
+            formData.set("creditAmount", fx.parsed.creditAmount.toString());
+          }
+          if (fx.parsed.exchangeRate !== undefined) {
+            formData.set("exchangeRate", fx.parsed.exchangeRate.toString());
+          }
+        }
         setSubmitting(true);
         const result = await createTransferAction(formData);
         setSubmitting(false);
@@ -575,6 +793,11 @@ function TransferForm({
           name="fromAccountId"
           placeholder="Select source account"
           showBalance
+          value={fromAccountId}
+          onValueChange={(val) => {
+            setFromAccountId(val);
+            fx.reset();
+          }}
         />
       </div>
       <div className="space-y-2">
@@ -582,20 +805,37 @@ function TransferForm({
         <GroupedAccountSelect
           accounts={accounts}
           name="toAccountId"
-          defaultValue={accounts.length > 1 ? accounts[1].id : undefined}
+          value={toAccountId}
+          onValueChange={(val) => {
+            setToAccountId(val);
+            fx.reset();
+          }}
           placeholder="Select destination account"
           showBalance
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="transfer-amount">Amount</Label>
-        <MoneyInput
-          id="transfer-amount"
-          name="amount"
-          placeholder="0.00"
-          required
+
+      {isCrossCurrency ? (
+        <CrossCurrencyFields
+          state={fx}
+          sourceCurrency={srcCurrency}
+          destCurrency={dstCurrency}
+          idPrefix="transfer"
         />
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="transfer-amount">Amount</Label>
+          <MoneyInput
+            id="transfer-amount"
+            name="amount"
+            placeholder="0.00"
+            value={fx.amount}
+            onChange={fx.handleAmountChange}
+            required
+          />
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="transfer-description">Description (optional)</Label>
         <Input
@@ -604,15 +844,7 @@ function TransferForm({
           placeholder="e.g. Move to savings"
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="transfer-date">Date</Label>
-        <DatePicker
-          id="transfer-date"
-          name="date"
-          required
-          defaultValue={new Date().toISOString().split("T")[0]}
-        />
-      </div>
+      <DateTimeFields prefix="transfer" />
       <div className="space-y-2">
         <Label htmlFor="transfer-notes">Notes (optional)</Label>
         <Textarea
@@ -631,6 +863,191 @@ function TransferForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function DuplicateTransactionDialog({
+  duplicatingTxn,
+  open,
+  onOpenChange,
+  accounts,
+  allCategories,
+  expenseCategories,
+  incomeCategories,
+  onError,
+  onClose,
+}: {
+  duplicatingTxn: TransactionRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  accounts: AccountWithBalance[];
+  allCategories: Category[];
+  expenseCategories: Category[];
+  incomeCategories: Category[];
+  onError: (msg: string) => void;
+  onClose: () => void;
+}) {
+  // Determine if the original transaction was cross-currency
+  const origIsCrossCurrency =
+    duplicatingTxn != null &&
+    duplicatingTxn.transferAmount != null &&
+    duplicatingTxn.transferCurrency != null &&
+    duplicatingTxn.transferCurrency !== duplicatingTxn.currency;
+
+  // Compute initial exchange rate from the original transaction
+  const origExchangeRate =
+    origIsCrossCurrency && duplicatingTxn.transferAmount && duplicatingTxn.amount > 0
+      ? (duplicatingTxn.transferAmount / duplicatingTxn.amount)
+          .toFixed(6)
+          .replace(/0+$/, "")
+          .replace(/\.$/, "")
+      : "";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Duplicate Transaction</DialogTitle>
+        </DialogHeader>
+        {duplicatingTxn && accounts.length > 0 && (
+          <form
+            action={async (formData) => {
+              formData.set("direction", duplicatingTxn.type);
+              // If the original was cross-currency, include the cross-currency fields
+              if (origIsCrossCurrency) {
+                // Only set if not already present from CrossCurrencyFields
+                if (!formData.get("creditAmount") && duplicatingTxn.transferAmount != null) {
+                  formData.set("creditAmount", duplicatingTxn.transferAmount.toString());
+                }
+                if (!formData.get("exchangeRate") && origExchangeRate) {
+                  formData.set("exchangeRate", origExchangeRate);
+                }
+              }
+              const result = await createTransactionAction(formData);
+              if (result?.error) {
+                onError(result.error);
+                return;
+              }
+              onClose();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Account</Label>
+              <GroupedAccountSelect
+                accounts={accounts}
+                name="accountId"
+                defaultValue={duplicatingTxn.accountId}
+                placeholder="Select account"
+                showBalance
+              />
+            </div>
+            {duplicatingTxn.categoryAccountId && (
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select
+                  name="categoryAccountId"
+                  required
+                  defaultValue={duplicatingTxn.categoryAccountId}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select category">
+                      {(value: string) => {
+                        const cat = allCategories.find((c) => c.id === value);
+                        return cat?.name ?? value;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(duplicatingTxn.type === "expense" ? expenseCategories : incomeCategories).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {origIsCrossCurrency ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dup-amount">
+                    Amount ({duplicatingTxn.currency})
+                  </Label>
+                  <MoneyInput
+                    id="dup-amount"
+                    name="amount"
+                    defaultValue={Math.abs(duplicatingTxn.amount).toFixed(2)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dup-credit-amount">
+                    Amount ({duplicatingTxn.transferCurrency})
+                  </Label>
+                  <MoneyInput
+                    id="dup-credit-amount"
+                    name="creditAmount"
+                    defaultValue={
+                      duplicatingTxn.transferAmount != null
+                        ? Math.abs(duplicatingTxn.transferAmount).toFixed(2)
+                        : ""
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dup-exchange-rate">
+                    Rate ({duplicatingTxn.currency} → {duplicatingTxn.transferCurrency})
+                  </Label>
+                  <Input
+                    id="dup-exchange-rate"
+                    name="exchangeRate"
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 1.08"
+                    defaultValue={origExchangeRate}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="dup-amount">Amount</Label>
+                <MoneyInput
+                  id="dup-amount"
+                  name="amount"
+                  defaultValue={Math.abs(duplicatingTxn.amount).toFixed(2)}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="dup-description">Description (optional)</Label>
+              <Input
+                id="dup-description"
+                name="description"
+                defaultValue={duplicatingTxn.description ?? ""}
+              />
+            </div>
+            <DateTimeFields prefix="dup" />
+            <div className="space-y-2">
+              <Label htmlFor="dup-notes">Notes</Label>
+              <Textarea
+                id="dup-notes"
+                name="notes"
+                defaultValue={duplicatingTxn.notes ?? ""}
+                className="min-h-12"
+              />
+            </div>
+            <Button type="submit" className="w-full">
+              Create Duplicate
+            </Button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -814,103 +1231,20 @@ export function TransactionList({
       </Dialog>
 
       {/* Duplicate Transaction Dialog */}
-      <Dialog open={duplicateOpen} onOpenChange={setDuplicateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Duplicate Transaction</DialogTitle>
-          </DialogHeader>
-          {duplicatingTxn && accounts.length > 0 && (
-            <form
-              action={async (formData) => {
-                formData.set("direction", duplicatingTxn.type);
-                const result = await createTransactionAction(formData);
-                if (result?.error) {
-                  showError(result.error);
-                  return;
-                }
-                setDuplicateOpen(false);
-                setDuplicatingTxn(null);
-              }}
-              className="space-y-4"
-            >
-              <div className="space-y-2">
-                <Label>Account</Label>
-                <GroupedAccountSelect
-                  accounts={accounts}
-                  name="accountId"
-                  defaultValue={duplicatingTxn.accountId}
-                  placeholder="Select account"
-                  showBalance
-                />
-              </div>
-              {duplicatingTxn.categoryAccountId && (
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Select
-                    name="categoryAccountId"
-                    required
-                    defaultValue={duplicatingTxn.categoryAccountId}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select category">
-                        {(value: string) => {
-                          const cat = allCategories.find((c) => c.id === value);
-                          return cat?.name ?? value;
-                        }}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(duplicatingTxn.type === "expense" ? expenseCategories : incomeCategories).map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="dup-amount">Amount</Label>
-                <MoneyInput
-                  id="dup-amount"
-                  name="amount"
-                  defaultValue={Math.abs(duplicatingTxn.amount).toFixed(2)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dup-description">Description (optional)</Label>
-                <Input
-                  id="dup-description"
-                  name="description"
-                  defaultValue={duplicatingTxn.description ?? ""}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dup-date">Date</Label>
-                <DatePicker
-                  id="dup-date"
-                  name="date"
-                  required
-                  defaultValue={new Date().toISOString().split("T")[0]}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dup-notes">Notes</Label>
-                <Textarea
-                  id="dup-notes"
-                  name="notes"
-                  defaultValue={duplicatingTxn.notes ?? ""}
-                  className="min-h-12"
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                Create Duplicate
-              </Button>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
+      <DuplicateTransactionDialog
+        duplicatingTxn={duplicatingTxn}
+        open={duplicateOpen}
+        onOpenChange={setDuplicateOpen}
+        accounts={accounts}
+        allCategories={allCategories}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
+        onError={showError}
+        onClose={() => {
+          setDuplicateOpen(false);
+          setDuplicatingTxn(null);
+        }}
+      />
 
       <ConfirmDialog />
       <ErrorDialog />

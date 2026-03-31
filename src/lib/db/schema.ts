@@ -67,6 +67,7 @@ export const accounts = pgTable(
     name: text().notNull(),
     type: ledgerAccountType().notNull(),
     institution: text(),
+    currency: text().notNull().default("USD"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -95,7 +96,7 @@ export const journalEntries = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    date: date().notNull(),
+    date: timestamp("date", { withTimezone: true }).notNull().defaultNow(),
     description: text(),
     notes: text(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -141,7 +142,6 @@ export const budgets = pgTable(
     amount: bigint({ mode: "bigint" }).notNull(), // minor units
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
-    isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -166,7 +166,6 @@ export const goals = pgTable(
     name: text().notNull(),
     targetAmount: bigint("target_amount", { mode: "bigint" }).notNull(), // minor units
     deadline: date(),
-    status: text().notNull().default("active"),
     notes: text(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -175,10 +174,6 @@ export const goals = pgTable(
   (t) => [
     index("goals_user_idx").on(t.userId),
     index("goals_account_idx").on(t.accountId),
-    check(
-      "goals_status_check",
-      sql`${t.status} IN ('active', 'completed', 'paused')`,
-    ),
   ],
 );
 
@@ -276,4 +271,25 @@ export const emailVerificationCodes = pgTable(
       .defaultNow(),
   },
   (t) => [index("email_verification_user_idx").on(t.userId)],
+);
+
+// ============================================================================
+// FX — Cached daily exchange rates from ECB (via frankfurter.app)
+// ============================================================================
+
+export const exchangeRates = pgTable(
+  "exchange_rates",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    baseCurrency: text("base_currency").notNull(), // "USD" from OXR (was "EUR" from ECB)
+    date: date().notNull(),
+    rates: jsonb().$type<Record<string, number>>().notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("exchange_rates_base_date_unique").on(t.baseCurrency, t.date),
+    index("exchange_rates_date_idx").on(t.date),
+  ],
 );

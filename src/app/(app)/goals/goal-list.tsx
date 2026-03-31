@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +34,7 @@ import {
   updateGoalAction,
 } from "../actions";
 import { AnimateIn } from "@/components/shared/animate-in";
+import { CurrencySelect } from "@/components/shared/currency-select";
 import { QuickFundDialog } from "./quick-fund-dialog";
 import { formatDateFull } from "@/lib/utils/format-date";
 import {
@@ -43,12 +43,6 @@ import {
 } from "lucide-react";
 import type { GoalWithProgress } from "@/lib/services/goals";
 import type { AccountWithBalance } from "@/lib/services/accounts";
-
-const statusBadgeVariant: Record<string, "default" | "secondary" | "outline"> = {
-  active: "default",
-  completed: "secondary",
-  paused: "outline",
-};
 
 export function GoalList({
   goals,
@@ -62,18 +56,17 @@ export function GoalList({
   const [fundGoalId, setFundGoalId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<GoalWithProgress | null>(null);
+  const [createCurrency, setCreateCurrency] = useState<string | undefined>();
 
   const fundingGoal = fundGoalId
     ? goals.find((g) => g.id === fundGoalId) ?? null
     : null;
 
-  const activeGoals = goals.filter((g) => g.status === "active");
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-muted-foreground">
-          {activeGoals.length} active goal{activeGoals.length !== 1 && "s"}
+          {goals.length} goal{goals.length !== 1 && "s"}
         </p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>Add Goal</DialogTrigger>
@@ -102,11 +95,18 @@ export function GoalList({
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="goal-currency">Currency</Label>
+                <CurrencySelect
+                  id="goal-currency"
+                  onChange={setCreateCurrency}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="targetAmount">Target Amount</Label>
                 <MoneyInput
                   id="targetAmount"
                   name="targetAmount"
-                  placeholder="10,000.00"
+                  currencyCode={createCurrency}
                   required
                 />
               </div>
@@ -148,13 +148,10 @@ export function GoalList({
               <ContextMenu>
                 <ContextMenuTrigger>
                   <Card className="cursor-pointer">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-medium truncate">
                         {goal.name}
                       </CardTitle>
-                      <Badge variant={statusBadgeVariant[goal.status] ?? "outline"}>
-                        {goal.status}
-                      </Badge>
                     </CardHeader>
                     <CardContent>
                       <div className="flex items-baseline justify-between">
@@ -187,34 +184,32 @@ export function GoalList({
                         )}
                       </div>
 
-                      {goal.status === "active" && (
+                      <div className="mt-3 flex justify-end">
                         <Button
+                          variant="outline"
                           size="sm"
-                          className="mt-3 w-full"
+                          className="h-auto py-0.5 px-2 text-xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
                             setFundGoalId(goal.id);
                           }}
                         >
+                          <WalletIcon className="size-3" data-icon="inline-start" />
                           Quick Fund
                         </Button>
-                      )}
+                      </div>
                     </CardContent>
                   </Card>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
-                  {goal.status === "active" && (
-                    <>
-                      <ContextMenuItem
-                        onClick={() => setFundGoalId(goal.id)}
-                      >
-                        <WalletIcon />
-                        Quick Fund
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                    </>
-                  )}
+                  <ContextMenuItem
+                    onClick={() => setFundGoalId(goal.id)}
+                  >
+                    <WalletIcon />
+                    Quick Fund
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
                   <ContextMenuItem
                     onClick={() => {
                       setEditingGoal(goal);

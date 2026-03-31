@@ -81,12 +81,50 @@ const nextAuth = NextAuth({
 
       return isLoggedIn;
     },
-    jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.jti = crypto.randomUUID();
         token.currency = user.currency ?? "USD";
+        token.lastVerified = Date.now();
+        return token;
       }
+
+      // Client called update() — force re-read from DB immediately
+      if (trigger === "update" && typeof token.id === "string") {
+        const [existing] = await db
+          .select({ id: users.id, currency: users.currency })
+          .from(users)
+          .where(eq(users.id, token.id))
+          .limit(1);
+
+        if (!existing) return null;
+        token.currency = existing.currency;
+        token.lastVerified = Date.now();
+        return token;
+      }
+
+      // Periodically verify the user still exists in the DB.
+      // This ensures DB resets (or user deletion) invalidate the session.
+      const verifyInterval = 5 * 60 * 1000; // 5 minutes
+      const lastVerified = (token.lastVerified as number) ?? 0;
+
+      if (
+        typeof token.id === "string" &&
+        Date.now() - lastVerified > verifyInterval
+      ) {
+        const [existing] = await db
+          .select({ id: users.id, currency: users.currency })
+          .from(users)
+          .where(eq(users.id, token.id))
+          .limit(1);
+
+        if (!existing) return null;
+
+        token.currency = existing.currency;
+        token.lastVerified = Date.now();
+      }
+
       return token;
     },
     session({ session, token }) {

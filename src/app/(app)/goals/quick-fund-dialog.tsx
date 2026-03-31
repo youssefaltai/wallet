@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,10 @@ export function QuickFundDialog({
   );
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState(() => {
+    const now = new Date();
+    return `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -56,14 +61,27 @@ export function QuickFundDialog({
   const isValid =
     selectedAccountId && amount && !isNaN(parsedAmount) && parsedAmount > 0 && date;
 
+  const fmtCurrency = useCallback(
+    (n: number) =>
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: goal.currency,
+      }).format(n),
+    [goal.currency],
+  );
+
   const previewText =
     isValid && selectedAccount
-      ? `Move $${parsedAmount.toFixed(2)} from ${selectedAccount.name} \u2192 ${goal.name}`
+      ? `Move ${fmtCurrency(parsedAmount)} from ${selectedAccount.name} \u2192 ${goal.name}`
       : null;
 
   function resetState() {
     setAmount("");
     setDate(new Date().toISOString().slice(0, 10));
+    setTime(() => {
+      const now = new Date();
+      return `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    });
     setError(null);
     setSuccess(false);
     setSubmitting(false);
@@ -85,7 +103,7 @@ export function QuickFundDialog({
     formData.set("goalId", goal.id);
     formData.set("sourceAccountId", selectedAccountId);
     formData.set("amount", parsedAmount.toString());
-    formData.set("date", date);
+    formData.set("date", new Date(`${date}T${time}`).toISOString());
 
     const result = await fundGoalAction(formData);
 
@@ -170,6 +188,7 @@ export function QuickFundDialog({
               <MoneyInput
                 id="fund-amount"
                 name="amount"
+                currencyCode={goal.currency}
                 placeholder="0.00"
                 value={amount}
                 onChange={setAmount}
@@ -177,15 +196,26 @@ export function QuickFundDialog({
               />
             </div>
 
-            {/* Date input */}
-            <div className="space-y-2">
-              <Label htmlFor="fund-date">Date</Label>
-              <DatePicker
-                id="fund-date"
-                value={date}
-                onChange={setDate}
-                required
-              />
+            {/* Date & time input */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="fund-date">Date</Label>
+                <DatePicker
+                  id="fund-date"
+                  value={date}
+                  onChange={setDate}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fund-time">Time</Label>
+                <TimePicker
+                  id="fund-time"
+                  value={time}
+                  onChange={setTime}
+                  required
+                />
+              </div>
             </div>
 
             {/* Preview */}

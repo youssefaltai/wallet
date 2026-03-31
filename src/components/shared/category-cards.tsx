@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import {
   ContextMenu,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/context-menu";
 import {
   deleteCategoryAction,
-  toggleBudgetAction,
+  deleteBudgetAction,
 } from "@/app/(app)/actions";
 import type { CategoryWithTotal } from "@/lib/services/categories";
 import type { BudgetStatus } from "@/lib/services/budgets";
@@ -33,7 +34,7 @@ import {
   ArrowDownLeftIcon,
   ArrowRightIcon,
   PiggyBankIcon,
-  PowerIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { AnimateIn } from "@/components/shared/animate-in";
 import { formatDateRange } from "@/lib/utils/format-date";
@@ -44,14 +45,8 @@ import { CreateBudgetDialog } from "@/components/shared/create-budget-dialog";
 import { EditBudgetDialog } from "@/components/shared/edit-budget-dialog";
 
 const TYPE_CONFIG = {
-  expense: {
-    icon: ArrowUpRightIcon,
-    label: "spent",
-  },
-  income: {
-    icon: ArrowDownLeftIcon,
-    label: "earned",
-  },
+  expense: { icon: ArrowUpRightIcon, label: "spent" },
+  income: { icon: ArrowDownLeftIcon, label: "earned" },
 } as const;
 
 export function CategoryCards({
@@ -61,6 +56,7 @@ export function CategoryCards({
   emptyMessage,
   placeholder,
   currency,
+  totalFormatted,
   budgets,
   periodStart,
   periodEnd,
@@ -71,6 +67,7 @@ export function CategoryCards({
   emptyMessage: string;
   placeholder: string;
   currency: string;
+  totalFormatted: string;
   budgets?: BudgetStatus[];
   periodStart?: string;
   periodEnd?: string;
@@ -103,17 +100,11 @@ export function CategoryCards({
   const budgetByCategoryId = new Map<string, BudgetStatus>();
   if (budgets) {
     for (const b of budgets) {
-      if (b.isActive && selectedDay >= b.startDate && selectedDay <= b.endDate) {
+      if (selectedDay >= b.startDate && selectedDay <= b.endDate) {
         budgetByCategoryId.set(b.categoryAccountId, b);
       }
     }
   }
-
-  const totalAmount = categories.reduce((sum, c) => sum + c.total, 0);
-  const totalFormatted = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(totalAmount);
 
   return (
     <div className="space-y-6">
@@ -155,10 +146,15 @@ export function CategoryCards({
                       onClick={() => router.push(transactionsUrl(cat.id))}
                     >
                       <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium">
-                          {cat.name}
-                        </CardTitle>
-                        <Icon className="size-4 text-muted-foreground" />
+                        <div className="flex items-center gap-1.5">
+                          <Icon className="size-4 text-muted-foreground" />
+                          <CardTitle className="text-sm font-medium">
+                            {cat.name}
+                          </CardTitle>
+                        </div>
+                        {cat.currency !== currency && (
+                          <Badge variant="secondary">{cat.currency}</Badge>
+                        )}
                       </CardHeader>
                       <CardContent className="space-y-3">
                         {budget ? (
@@ -180,7 +176,7 @@ export function CategoryCards({
                               <span>
                                 {budget.remaining >= 0
                                   ? `${budget.remainingFormatted} left`
-                                  : `${new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Math.abs(budget.remaining))} over`}
+                                  : `${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(Math.abs(budget.remaining))} over`}
                                 {" \u00B7 "}
                                 {Math.round(budget.percentUsed)}% used
                               </span>
@@ -207,7 +203,7 @@ export function CategoryCards({
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-auto -my-[3px] py-0.5 px-2 text-xs"
+                                  className="mt-2 h-auto py-0.5 px-2 text-xs"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setBudgetCategory(cat);
@@ -254,13 +250,13 @@ export function CategoryCards({
                         </ContextMenuItem>
                         <ContextMenuItem
                           onClick={async () => {
-                            if (!(await confirm(`Deactivate the budget "${budget.name}"? It will no longer track spending.`))) return;
-                            const result = await toggleBudgetAction(budget.id, !budget.isActive);
+                            if (!(await confirm(`Delete the budget "${budget.name}"? This action cannot be undone.`))) return;
+                            const result = await deleteBudgetAction(budget.id);
                             if (result?.error) showError(result.error);
                           }}
                         >
-                          <PowerIcon />
-                          Deactivate Budget
+                          <Trash2Icon />
+                          Delete Budget
                         </ContextMenuItem>
                       </>
                     )}

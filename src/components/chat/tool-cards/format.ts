@@ -1,5 +1,5 @@
-import { formatDate, formatDateRange } from "@/lib/utils/format-date";
-export { formatDate };
+import { formatDate, formatRelativeDateTime, formatDateRange } from "@/lib/utils/format-date";
+export { formatDate, formatRelativeDateTime };
 
 export function formatPeriod(period: { startDate: string; endDate: string }): string {
   return formatDateRange(period.startDate, period.endDate);

@@ -8,18 +8,20 @@ import {
   getCashFlow,
 } from "@/lib/services/transactions";
 import { getBudgetStatuses } from "@/lib/services/budgets";
+import { getMinorUnitFactor } from "@/lib/constants/currencies";
 import { getGoals, getGoalsTotalBalance } from "@/lib/services/goals";
 import {
   getExpenseCategories,
   getIncomeCategories,
   getCategoryByName,
 } from "@/lib/services/categories";
+import { getRates, convert } from "@/lib/services/fx-rates";
 
 export function createFinancialReadTools(userId: string, currency = "USD") {
   return {
     get_accounts: tool({
       description:
-        "Get all of the user's financial accounts with current balances.",
+        "Get all of the user's accounts (bank, savings, cash, investments) and credits/loans with current balances.",
       inputSchema: z.object({}),
       execute: async () => {
         try {
@@ -108,7 +110,8 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       }),
       execute: async ({ startDate, endDate }) => {
         try {
-          return await getSpendingSummary(userId, startDate, endDate);
+          const result = await getSpendingSummary(userId, startDate, endDate, currency);
+          return { ...result, currency };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
         }
@@ -124,7 +127,8 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       }),
       execute: async ({ startDate, endDate }) => {
         try {
-          return await getIncomeSummary(userId, startDate, endDate);
+          const result = await getIncomeSummary(userId, startDate, endDate, currency);
+          return { ...result, currency };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
         }
@@ -169,7 +173,7 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       inputSchema: z.object({}),
       execute: async () => {
         try {
-          const userGoals = await getGoals(userId, { currency });
+          const userGoals = await getGoals(userId);
           if (userGoals.length === 0)
             return { goals: [] as typeof userGoals, message: "No goals set up yet." };
           return { goals: userGoals };
@@ -181,26 +185,34 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
 
     get_net_worth: tool({
       description:
-        "Calculate total net worth: total assets (including goal savings) minus total liabilities.",
+        "Calculate total net worth: total assets (including goal savings) minus total liabilities. All amounts converted to the user's base currency.",
       inputSchema: z.object({}),
       execute: async () => {
         try {
           const accts = await getAccountsWithBalances(userId, currency);
+
+          // Convert all account balances to the user's base currency
+          const needsConversion = accts.some((a) => a.isActive && a.currency !== currency);
+          const rates = needsConversion ? await getRates() : null;
 
           let assets = 0;
           let liabilities = 0;
 
           for (const a of accts) {
             if (!a.isActive) continue;
+            const converted =
+              a.currency === currency
+                ? a.balance
+                : convert(a.balance, a.currency, currency, rates!);
             if (isLiability(a.type)) {
-              liabilities += a.balance;
+              liabilities += converted;
             } else {
-              assets += a.balance;
+              assets += converted;
             }
           }
 
           // Goal savings are real money the user has set aside — count as assets
-          const goalBalance = await getGoalsTotalBalance(userId);
+          const goalBalance = await getGoalsTotalBalance(userId, currency);
           assets += goalBalance;
 
           const availableToSpend = assets - goalBalance - liabilities;
@@ -212,6 +224,7 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
             totalLiabilities: liabilities,
             goalSavings: goalBalance,
             accountCount: accts.length,
+            currency,
           };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
@@ -228,26 +241,72 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       }),
       execute: async ({ startDate, endDate }) => {
         try {
-          return await getCashFlow(userId, startDate, endDate);
+          const result = await getCashFlow(userId, startDate, endDate, currency);
+          return { ...result, currency };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
         }
       },
     }),
 
-    get_categories: tool({
+    get_expense_categories: tool({
       description:
-        "Get all expense categories and income sources.",
+        "Get all expense categories (e.g., Groceries, Rent, Entertainment).",
       inputSchema: z.object({}),
       execute: async () => {
         try {
-          const [expense, income] = await Promise.all([
-            getExpenseCategories(userId),
-            getIncomeCategories(userId),
-          ]);
+          const categories = await getExpenseCategories(userId);
+          return { categories: categories.map((c) => ({ id: c.id, name: c.name, currency: c.currency })) };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
+        }
+      },
+    }),
+
+    get_income_sources: tool({
+      description:
+        "Get all income sources (e.g., Salary, Freelancing, Interest).",
+      inputSchema: z.object({}),
+      execute: async () => {
+        try {
+          const sources = await getIncomeCategories(userId);
+          return { sources: sources.map((c) => ({ id: c.id, name: c.name, currency: c.currency })) };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
+        }
+      },
+    }),
+
+    convert_currency: tool({
+      description:
+        "Convert an amount between two currencies using live exchange rates. Also useful for looking up the current exchange rate between any two currencies.",
+      inputSchema: z.object({
+        amount: z
+          .number()
+          .positive("Amount must be greater than 0")
+          .describe("The amount to convert"),
+        from: z
+          .string()
+          .length(3)
+          .describe("Source currency code (e.g. USD, EUR, GBP)"),
+        to: z
+          .string()
+          .length(3)
+          .describe("Target currency code (e.g. USD, EUR, GBP)"),
+      }),
+      execute: async ({ amount, from, to }) => {
+        try {
+          const fromUpper = from.toUpperCase();
+          const toUpper = to.toUpperCase();
+          const rates = await getRates();
+          const converted = convert(amount, fromUpper, toUpper, rates);
+          const rate = convert(1, fromUpper, toUpper, rates);
           return {
-            expenseCategories: expense.map((c) => c.name),
-            incomeCategories: income.map((c) => c.name),
+            amount,
+            from: fromUpper,
+            to: toUpper,
+            convertedAmount: Math.round(converted * getMinorUnitFactor(toUpper)) / getMinorUnitFactor(toUpper),
+            rate: Math.round(rate * 10000) / 10000,
           };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };

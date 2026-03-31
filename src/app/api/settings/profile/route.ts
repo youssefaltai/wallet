@@ -42,7 +42,7 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json();
-    const { name, email, image } = body;
+    const { name, email, image, currency } = body;
 
     if (name !== undefined && typeof name === "string" && name.length > 100) {
       return NextResponse.json({ error: "Name must be 100 characters or less" }, { status: 400 });
@@ -57,7 +57,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    const updates: { name?: string | null; image?: string | null } = {};
+    const updates: { name?: string | null; image?: string | null; currency?: string } = {};
 
     if (name !== undefined) {
       updates.name = name || null;
@@ -65,6 +65,10 @@ export async function PATCH(req: Request) {
 
     if (image !== undefined) {
       updates.image = image || null;
+    }
+
+    if (currency !== undefined && typeof currency === "string" && currency.length === 3) {
+      updates.currency = currency.toUpperCase();
     }
 
     // Email change requires re-verification — wrap in transaction for atomicity

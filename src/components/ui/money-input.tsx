@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { CURRENCIES, getDecimalPlaces } from "@/lib/constants/currencies";
+import { useCurrency } from "@/components/providers/currency-provider";
 
 /**
  * Formats a numeric string with commas as thousands separators.
@@ -30,9 +32,14 @@ function formatWithCommas(raw: string): string {
 
 /**
  * Strips commas and validates that the string is a valid decimal number
- * with at most 2 decimal places.
+ * with at most `maxDecimals` decimal places.
  */
-function sanitize(input: string): string {
+function sanitize(input: string, maxDecimals = 2): string {
+  // Zero-decimal currencies (JPY, KRW) should not allow a decimal point
+  if (maxDecimals === 0) {
+    return input.replace(/[^0-9]/g, "").replace(/^0+(\d)/, "$1") || "0";
+  }
+
   // Remove everything except digits and decimal point
   let cleaned = input.replace(/[^0-9.]/g, "");
 
@@ -44,9 +51,9 @@ function sanitize(input: string): string {
       cleaned.slice(dotIndex + 1).replace(/\./g, "");
   }
 
-  // Limit to 2 decimal places
-  if (dotIndex !== -1 && cleaned.length - dotIndex - 1 > 2) {
-    cleaned = cleaned.slice(0, dotIndex + 3);
+  // Limit decimal places
+  if (dotIndex !== -1 && cleaned.length - dotIndex - 1 > maxDecimals) {
+    cleaned = cleaned.slice(0, dotIndex + maxDecimals + 1);
   }
 
   // Remove leading zeros (but keep "0" and "0.")
@@ -64,8 +71,10 @@ interface MoneyInputProps
   > {
   /** The form field name. A hidden input with this name carries the raw numeric value. */
   name: string;
-  /** Currency symbol to show as prefix. Defaults to "$". */
+  /** Currency symbol to show as prefix. Derived from currencyCode or user's base currency by default. */
   currency?: string;
+  /** ISO 4217 currency code — used to derive decimal places and symbol. */
+  currencyCode?: string;
   /** Controlled raw numeric value (e.g. "1234.56"). */
   value?: string;
   /** Uncontrolled initial raw numeric value. */
@@ -76,29 +85,35 @@ interface MoneyInputProps
 
 function MoneyInput({
   name,
-  currency = "$",
+  currency,
+  currencyCode,
   value: controlledValue,
   defaultValue,
   onChange,
   className,
   id,
-  placeholder = "0.00",
+  placeholder: placeholderProp,
   required,
   disabled,
   "aria-invalid": ariaInvalid,
   ...rest
 }: MoneyInputProps) {
+  const baseCurrency = useCurrency();
+  const effectiveCode = currencyCode ?? baseCurrency;
+  const decimals = getDecimalPlaces(effectiveCode);
+  const resolvedSymbol = currency ?? (CURRENCIES.get(effectiveCode)?.symbol ?? effectiveCode);
+  const placeholder = placeholderProp ?? (decimals === 0 ? "0" : `0.${"0".repeat(decimals)}`);
   const isControlled = controlledValue !== undefined;
 
   const [internalValue, setInternalValue] = React.useState(() => {
-    if (defaultValue) return sanitize(defaultValue);
+    if (defaultValue) return sanitize(defaultValue, decimals);
     return "";
   });
 
   const rawValue = isControlled ? controlledValue : internalValue;
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const cleaned = sanitize(e.target.value);
+    const cleaned = sanitize(e.target.value, decimals);
     if (!isControlled) {
       setInternalValue(cleaned);
     }
@@ -112,7 +127,7 @@ function MoneyInput({
         className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground select-none text-sm"
         aria-hidden="true"
       >
-        {currency}
+        {resolvedSymbol}
       </span>
 
       {/* Visible formatted input */}

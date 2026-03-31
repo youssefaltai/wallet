@@ -20,7 +20,7 @@ export function NetWorthValue({
   );
 
   return (
-    <div className="text-2xl font-bold">
+    <div className="text-3xl font-bold">
       <CountUp value={value} format={format} />
     </div>
   );

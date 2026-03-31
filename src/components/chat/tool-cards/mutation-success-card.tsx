@@ -1,14 +1,17 @@
-import { Card, CardContent } from "@/components/ui/card";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isValidToolOutput } from "./format";
 
-const mutationLabels: Record<string, string> = {
-  update_account: "Account updated",
-  update_transaction: "Transaction updated",
-  delete_transaction: "Transaction deleted",
-  update_budget: "Budget updated",
-  update_goal: "Goal updated",
-  fund_goal: "Goal funded",
-  withdraw_from_goal: "Withdrawn from goal",
+const entityRoutes: Record<string, string> = {
+  update_account: "/accounts",
+  update_transaction: "/transactions",
+  delete_transaction: "/transactions",
+  update_budget: "/budgets",
+  update_goal: "/goals",
+  fund_goal: "/goals",
+  withdraw_from_goal: "/goals",
 };
 
 export function MutationSuccessCard({
@@ -18,28 +21,30 @@ export function MutationSuccessCard({
   output: unknown;
   toolName?: string;
 }) {
+  const router = useRouter();
   if (!output || typeof output !== "object") return null;
   if (!isValidToolOutput(output)) return null;
   const data = output as {
     success: boolean;
-    account?: { name: string };
-    budget?: { name: string };
-    goal?: { name: string };
+    account?: { id: string; name: string };
+    budget?: { id: string; name: string };
+    goal?: { id: string; name: string };
   };
-  const label = mutationLabels[toolName] ?? "Done";
+
   const entityName =
     data.account?.name ?? data.budget?.name ?? data.goal?.name;
+  if (!entityName) return null;
+
+  const route = entityRoutes[toolName] ?? "/dashboard";
 
   return (
-    <Card size="sm" className="max-w-sm">
-      <CardContent className="text-sm">
-        <span>
-          {label}
-          {entityName && (
-            <> · <span className="font-medium">{entityName}</span></>
-          )}
-        </span>
-      </CardContent>
+    <Card
+      className="cursor-pointer transition-colors hover:bg-muted/50"
+      onClick={() => router.push(route)}
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">{entityName}</CardTitle>
+      </CardHeader>
     </Card>
   );
 }

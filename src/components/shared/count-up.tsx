@@ -50,7 +50,7 @@ export function CountUp({
     return () => {
       if (ref.current != null) cancelAnimationFrame(ref.current);
     };
-  }, [value, duration]);
+  }, [value, format, duration]);
 
   return <span className={className}>{display}</span>;
 }
