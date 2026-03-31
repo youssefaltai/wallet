@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+.env*
+*.png
+.playwright-mcp
+.claude
+dist
+coverage
+.mcp.json
+docker-compose.yml
