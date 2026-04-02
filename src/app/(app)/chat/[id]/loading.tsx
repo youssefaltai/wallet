@@ -1,5 +1,3 @@
-import { Skeleton } from "@/components/ui/skeleton";
-
 export default function ChatConversationLoading() {
   return (
     <div className="flex flex-col h-full items-center justify-center text-muted-foreground">

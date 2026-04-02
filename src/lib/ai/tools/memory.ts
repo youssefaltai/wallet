@@ -32,7 +32,7 @@ export function createMemoryTools(userId: string) {
       description: "Update an existing memory with new information.",
       inputSchema: z.object({
         memoryId: z.string().uuid().describe("The memory ID to update"),
-        content: z.string().max(2000).optional().describe("New content"),
+        content: z.string().min(1).max(2000).optional().describe("New content"),
         tags: z.array(z.string().max(50)).max(10).optional().describe("New tags"),
       }),
       execute: async ({ memoryId, content, tags }) => {

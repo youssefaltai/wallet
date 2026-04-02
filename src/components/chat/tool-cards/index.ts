@@ -56,6 +56,7 @@ export const toolCardRegistry: Record<string, CardComponent> = {
   // Write tools — batch operations
   batch_create_transactions: BatchResultCard,
   batch_delete_transactions: BatchResultCard,
+  batch_delete_budgets: BatchResultCard,
   batch_create_budgets: BatchResultCard,
   batch_fund_goals: BatchResultCard,
   batch_create_goals: BatchResultCard,

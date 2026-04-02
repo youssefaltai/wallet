@@ -22,48 +22,32 @@ export function Calendar({ value, onSelect, isDisabled, className }: CalendarPro
   const today = formatISODate(new Date());
 
   // The month being viewed (not necessarily the selected date's month)
-  const [viewYear, setViewYear] = React.useState(() => {
+  const [viewDate, setViewDate] = React.useState(() => {
     if (value) {
-      const [y] = value.split("-").map(Number);
-      return y;
+      const [y, m] = value.split("-").map(Number);
+      return new Date(y, m - 1, 1);
     }
-    return new Date().getFullYear();
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
   });
-  const [viewMonth, setViewMonth] = React.useState(() => {
-    if (value) {
-      const [, m] = value.split("-").map(Number);
-      return m - 1;
-    }
-    return new Date().getMonth();
-  });
+
+  const viewYear = viewDate.getFullYear();
+  const viewMonth = viewDate.getMonth();
 
   // Update view when value changes externally
   React.useEffect(() => {
     if (value) {
       const [y, m] = value.split("-").map(Number);
-      setViewYear(y);
-      setViewMonth(m - 1);
+      setViewDate(new Date(y, m - 1, 1));
     }
   }, [value]);
 
   function prevMonth() {
-    setViewMonth((m) => {
-      if (m === 0) {
-        setViewYear((y) => y - 1);
-        return 11;
-      }
-      return m - 1;
-    });
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   }
 
   function nextMonth() {
-    setViewMonth((m) => {
-      if (m === 11) {
-        setViewYear((y) => y + 1);
-        return 0;
-      }
-      return m + 1;
-    });
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
   }
 
   // Build the grid of days

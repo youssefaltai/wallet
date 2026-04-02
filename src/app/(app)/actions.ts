@@ -20,7 +20,7 @@ const DATETIME_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2
 
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { createAccount, updateAccount } from "@/lib/services/accounts";
+import { createAccount, updateAccount, adjustAccountBalance } from "@/lib/services/accounts";
 import {
   createTransaction,
   deleteTransaction,
@@ -390,7 +390,7 @@ export async function fundGoalAction(
   formData: FormData,
 ): Promise<{ error?: string } | void> {
   try {
-    const { id: userId, currency } = await getAuthUser();
+    const { id: userId } = await getAuthUser();
 
     const goalId = requireString(formData, "goalId");
     if (!UUID_RE.test(goalId)) throw new Error("Invalid goal ID");
@@ -447,6 +447,25 @@ export async function updateAccountAction(
 
     revalidatePath("/accounts");
     revalidatePath("/dashboard");
+  } catch (error) {
+    return { error: extractError(error) };
+  }
+}
+
+export async function adjustAccountBalanceAction(
+  accountId: string,
+  newBalance: number,
+): Promise<{ error?: string } | void> {
+  try {
+    if (!UUID_RE.test(accountId)) throw new Error("Invalid account ID");
+    if (newBalance < 0) throw new Error("Balance cannot be negative");
+    const userId = await getAuthUserId();
+
+    await adjustAccountBalance(accountId, userId, newBalance);
+
+    revalidatePath("/accounts");
+    revalidatePath("/dashboard");
+    revalidatePath("/transactions");
   } catch (error) {
     return { error: extractError(error) };
   }
@@ -604,7 +623,7 @@ export async function updateGoalAction(
   formData: FormData,
 ): Promise<{ error?: string } | void> {
   try {
-    const { id: userId, currency } = await getAuthUser();
+    const { id: userId } = await getAuthUser();
 
     const goalId = requireString(formData, "goalId");
     if (!UUID_RE.test(goalId)) throw new Error("Invalid goal ID");

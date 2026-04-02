@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { AnimateIn } from "@/components/shared/animate-in";
-import { formatDateFull, formatRelativeDateTime, formatDateRange } from "@/lib/utils/format-date";
+import { formatRelativeDateTime, formatDateRange } from "@/lib/utils/format-date";
 
 export const metadata: Metadata = { title: "Budget Details | Wallet" };
 

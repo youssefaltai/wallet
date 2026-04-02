@@ -19,11 +19,10 @@
 
 import { db } from "@/lib/db";
 import { journalEntries, journalLines, accounts } from "@/lib/db/schema";
-import { eq, and, sql, inArray, type SQL } from "drizzle-orm";
-import { createJournalEntry, deleteJournalEntry } from "./ledger";
+import { eq, and, sql, inArray, isNull, type SQL } from "drizzle-orm";
+import { createJournalEntry, deleteJournalEntry, type Tx } from "./ledger";
 import { toMinorUnits, toMajorUnits, formatMoney } from "./money";
 import { getRates, convert } from "./fx-rates"; // used only for read-side aggregation (summaries, cash flow)
-import { getMinorUnitFactor } from "@/lib/constants/currencies";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -46,6 +45,7 @@ export interface CreateTransactionInput {
   date: string; // ISO datetime or YYYY-MM-DD
   notes?: string;
   currency?: string; // user's base currency (for formatting only)
+  idempotencyKey?: string; // AI-generated key to prevent duplicate entries on retry
 }
 
 export interface UpdateTransactionInput {
@@ -105,7 +105,10 @@ function inferType(
 function buildConditions(
   filters: Omit<TransactionFilters, "limit" | "offset">,
 ): SQL[] {
-  const c: SQL[] = [sql`je.user_id = ${filters.userId}`];
+  const c: SQL[] = [
+    sql`je.user_id = ${filters.userId}`,
+    sql`je.deleted_at IS NULL`,
+  ];
 
   if (filters.startDate && filters.endDate) {
     c.push(sql`je.date::date BETWEEN ${filters.startDate} AND ${filters.endDate}`);
@@ -175,80 +178,108 @@ function buildConditions(
 
 // ── Write ─────────────────────────────────────────────────────────────────
 
+/** Query current account balance within the given transaction context (minor units). */
+async function getBalanceInTx(tx: Tx, accountId: string): Promise<bigint> {
+  const [row] = await tx
+    .select({ balance: sql<string>`COALESCE(SUM(${journalLines.amount}), 0)` })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+    .where(and(eq(journalLines.accountId, accountId), isNull(journalEntries.deletedAt)));
+  return BigInt(row?.balance ?? "0");
+}
+
 export async function createTransaction(input: CreateTransactionInput) {
-  // Fetch both accounts to get their currencies
-  const accountIds = [input.debitAccountId, input.creditAccountId];
-  const owned = await db
-    .select({ id: accounts.id, currency: accounts.currency })
-    .from(accounts)
-    .where(and(eq(accounts.userId, input.userId), inArray(accounts.id, accountIds)));
-  if (owned.length < new Set(accountIds).size) {
-    throw new Error("Account not found");
-  }
-
-  const debitAccount = owned.find((a) => a.id === input.debitAccountId)!;
-  const creditAccount = owned.find((a) => a.id === input.creditAccountId)!;
-
-  const isCrossCurrency = debitAccount.currency !== creditAccount.currency;
-
-  let debitMinor: bigint;
-  let creditMinor: bigint;
-
-  if (isCrossCurrency) {
-    const hasAmount = input.amount !== undefined && input.amount > 0;
-    const hasCreditAmount = input.creditAmount !== undefined && input.creditAmount > 0;
-    const hasRate = input.exchangeRate !== undefined && input.exchangeRate > 0;
-
-    let resolvedAmount = hasAmount ? Math.abs(input.amount) : 0;
-    let resolvedCreditAmount = hasCreditAmount ? Math.abs(input.creditAmount!) : 0;
-
-    if (hasAmount && hasCreditAmount) {
-      // Rule 1 & 2: both amounts provided — use them directly (ignore rate if present)
-    } else if (hasAmount && hasRate) {
-      // Rule 3: compute creditAmount from amount * exchangeRate
-      resolvedCreditAmount = resolvedAmount * input.exchangeRate!;
-    } else if (hasCreditAmount && hasRate) {
-      // Rule 4: compute amount from creditAmount / exchangeRate
-      resolvedAmount = resolvedCreditAmount / input.exchangeRate!;
-    } else {
-      throw new Error(
-        "Cross-currency transactions require at least two of: amount, creditAmount, exchangeRate. " +
-        `Debit account uses ${debitAccount.currency}, credit account uses ${creditAccount.currency}. ` +
-        "Provide any two of: amount (source currency) + creditAmount (destination currency), " +
-        "amount + exchangeRate, or creditAmount + exchangeRate.",
-      );
+  return db.transaction(async (tx) => {
+    // Fetch both accounts to get their currencies and types
+    const accountIds = [input.debitAccountId, input.creditAccountId];
+    const owned = await tx
+      .select({ id: accounts.id, currency: accounts.currency, type: accounts.type })
+      .from(accounts)
+      .where(and(eq(accounts.userId, input.userId), inArray(accounts.id, accountIds)));
+    if (owned.length < new Set(accountIds).size) {
+      throw new Error("Account not found");
     }
 
-    debitMinor = toMinorUnits(resolvedAmount, debitAccount.currency);
-    creditMinor = toMinorUnits(resolvedCreditAmount, creditAccount.currency);
-  } else {
-    // Same-currency
-    debitMinor = toMinorUnits(Math.abs(input.amount), debitAccount.currency);
-    creditMinor = debitMinor;
-  }
+    const debitAccount = owned.find((a) => a.id === input.debitAccountId);
+    const creditAccount = owned.find((a) => a.id === input.creditAccountId);
+    if (!debitAccount || !creditAccount) throw new Error("Account not found");
 
-  const entry = await createJournalEntry(
-    input.userId,
-    input.date,
-    input.description ?? null,
-    input.notes ?? null,
-    [
-      { accountId: input.debitAccountId, amount: debitMinor, currency: debitAccount.currency },
-      { accountId: input.creditAccountId, amount: -creditMinor, currency: creditAccount.currency },
-    ],
-  );
+    const isCrossCurrency = debitAccount.currency !== creditAccount.currency;
 
-  // Format using the debit account's currency
-  const displayCurrency = debitAccount.currency;
+    let debitMinor: bigint;
+    let creditMinor: bigint;
 
-  return {
-    id: entry.id,
-    date: entry.date,
-    description: entry.description,
-    notes: entry.notes,
-    amount: toMajorUnits(debitMinor, displayCurrency),
-    amountFormatted: formatMoney(debitMinor, displayCurrency),
-  };
+    if (isCrossCurrency) {
+      const hasAmount = input.amount !== undefined && input.amount > 0;
+      const hasCreditAmount = input.creditAmount !== undefined && input.creditAmount > 0;
+      const hasRate = input.exchangeRate !== undefined && input.exchangeRate > 0;
+
+      let resolvedAmount = hasAmount ? Math.abs(input.amount) : 0;
+      let resolvedCreditAmount = hasCreditAmount ? Math.abs(input.creditAmount!) : 0;
+
+      if (hasAmount && hasCreditAmount) {
+        // Rule 1 & 2: both amounts provided — use them directly (ignore rate if present)
+      } else if (hasAmount && hasRate) {
+        // Rule 3: compute creditAmount from amount * exchangeRate
+        resolvedCreditAmount = resolvedAmount * input.exchangeRate!;
+      } else if (hasCreditAmount && hasRate) {
+        // Rule 4: compute amount from creditAmount / exchangeRate
+        resolvedAmount = resolvedCreditAmount / input.exchangeRate!;
+      } else {
+        throw new Error(
+          "Cross-currency transactions require at least two of: amount, creditAmount, exchangeRate. " +
+          `Debit account uses ${debitAccount.currency}, credit account uses ${creditAccount.currency}. ` +
+          "Provide any two of: amount (source currency) + creditAmount (destination currency), " +
+          "amount + exchangeRate, or creditAmount + exchangeRate.",
+        );
+      }
+
+      debitMinor = toMinorUnits(resolvedAmount, debitAccount.currency);
+      creditMinor = toMinorUnits(resolvedCreditAmount, creditAccount.currency);
+    } else {
+      // Same-currency
+      debitMinor = toMinorUnits(Math.abs(input.amount), debitAccount.currency);
+      creditMinor = debitMinor;
+    }
+
+    // Overdraft check for asset-to-asset transfers: credit side is the source account
+    const isTransfer =
+      (creditAccount.type === "asset" || creditAccount.type === "liability") &&
+      (debitAccount.type === "asset" || debitAccount.type === "liability");
+    if (isTransfer) {
+      const srcBalance = await getBalanceInTx(tx, input.creditAccountId);
+      if (srcBalance - creditMinor < 0n) {
+        throw new Error(
+          `Insufficient balance in source account. Available: ${formatMoney(srcBalance < 0n ? 0n : srcBalance, creditAccount.currency)}, required: ${formatMoney(creditMinor, creditAccount.currency)}.`,
+        );
+      }
+    }
+
+    const entry = await createJournalEntry(
+      input.userId,
+      input.date,
+      input.description ?? null,
+      input.notes ?? null,
+      [
+        { accountId: input.debitAccountId, amount: debitMinor, currency: debitAccount.currency },
+        { accountId: input.creditAccountId, amount: -creditMinor, currency: creditAccount.currency },
+      ],
+      tx,
+      input.idempotencyKey,
+    );
+
+    // Format using the debit account's currency
+    const displayCurrency = debitAccount.currency;
+
+    return {
+      id: entry.id,
+      date: entry.date,
+      description: entry.description,
+      notes: entry.notes,
+      amount: toMajorUnits(debitMinor, displayCurrency),
+      amountFormatted: formatMoney(debitMinor, displayCurrency),
+    };
+  });
 }
 
 export async function deleteTransaction(transactionId: string, userId: string) {
@@ -262,40 +293,26 @@ export async function updateTransaction(
   updates: UpdateTransactionInput,
 ) {
   return db.transaction(async (tx) => {
-    // 1. Update journal entry metadata if anything changed
-    const entryUpdates: Partial<typeof journalEntries.$inferInsert> = {};
+    // 1. Update journal entry metadata (always stamp updatedAt)
+    const entryUpdates: Partial<typeof journalEntries.$inferInsert> = {
+      updatedAt: new Date(),
+    };
     if (updates.description !== undefined)
       entryUpdates.description = updates.description;
     if (updates.notes !== undefined) entryUpdates.notes = updates.notes;
 
-    let entry;
-    if (Object.keys(entryUpdates).length > 0) {
-      const [updated] = await tx
-        .update(journalEntries)
-        .set(entryUpdates)
-        .where(
-          and(
-            eq(journalEntries.id, transactionId),
-            eq(journalEntries.userId, userId),
-          ),
-        )
-        .returning();
-      if (!updated) throw new Error("Transaction not found");
-      entry = updated;
-    } else {
-      const [existing] = await tx
-        .select()
-        .from(journalEntries)
-        .where(
-          and(
-            eq(journalEntries.id, transactionId),
-            eq(journalEntries.userId, userId),
-          ),
-        )
-        .limit(1);
-      if (!existing) throw new Error("Transaction not found");
-      entry = existing;
-    }
+    const [entry] = await tx
+      .update(journalEntries)
+      .set(entryUpdates)
+      .where(
+        and(
+          eq(journalEntries.id, transactionId),
+          eq(journalEntries.userId, userId),
+          isNull(journalEntries.deletedAt),
+        ),
+      )
+      .returning();
+    if (!entry) throw new Error("Transaction not found");
 
     // 2. Swap the debit line's account (positive amount = debit)
     if (updates.debitAccountId !== undefined) {
@@ -315,7 +332,7 @@ export async function updateTransaction(
         const accts = await tx
           .select({ id: accounts.id, currency: accounts.currency })
           .from(accounts)
-          .where(inArray(accounts.id, [currentDebitLine.accountId, updates.debitAccountId]));
+          .where(and(eq(accounts.userId, userId), inArray(accounts.id, [currentDebitLine.accountId, updates.debitAccountId])));
 
         const currentCurrency = accts.find(a => a.id === currentDebitLine.accountId)?.currency;
         const newCurrency = accts.find(a => a.id === updates.debitAccountId)?.currency;
@@ -357,7 +374,7 @@ export async function updateTransaction(
         const accts = await tx
           .select({ id: accounts.id, currency: accounts.currency })
           .from(accounts)
-          .where(inArray(accounts.id, [currentCreditLine.accountId, updates.creditAccountId]));
+          .where(and(eq(accounts.userId, userId), inArray(accounts.id, [currentCreditLine.accountId, updates.creditAccountId])));
 
         const currentCurrency = accts.find(a => a.id === currentCreditLine.accountId)?.currency;
         const newCurrency = accts.find(a => a.id === updates.creditAccountId)?.currency;
@@ -400,21 +417,24 @@ export async function batchCreateTransactions(
   return db.transaction(async (tx) => {
     const totalsMap = new Map<string, bigint>();
 
+    // Collect all unique account IDs across all inputs (all inputs share the same userId)
+    const userId = inputs[0].userId;
+    const allAccountIds = [...new Set(inputs.flatMap((inp) => [inp.debitAccountId, inp.creditAccountId]))];
+    const ownedRows = await tx
+      .select({ id: accounts.id, currency: accounts.currency, type: accounts.type })
+      .from(accounts)
+      .where(and(eq(accounts.userId, userId), inArray(accounts.id, allAccountIds)));
+    const accountMap = new Map(ownedRows.map((a) => [a.id, a]));
+
     for (let i = 0; i < inputs.length; i++) {
       const input = inputs[i];
       try {
-        // Fetch both accounts to get their currencies
-        const accountIds = [input.debitAccountId, input.creditAccountId];
-        const owned = await tx
-          .select({ id: accounts.id, currency: accounts.currency })
-          .from(accounts)
-          .where(and(eq(accounts.userId, input.userId), inArray(accounts.id, accountIds)));
-        if (owned.length < new Set(accountIds).size) {
+        // Look up both accounts from the pre-fetched map
+        const debitAccount = accountMap.get(input.debitAccountId);
+        const creditAccount = accountMap.get(input.creditAccountId);
+        if (!debitAccount || !creditAccount) {
           throw new Error("Account not found");
         }
-
-        const debitAccount = owned.find((a) => a.id === input.debitAccountId)!;
-        const creditAccount = owned.find((a) => a.id === input.creditAccountId)!;
 
         const isCrossCurrency = debitAccount.currency !== creditAccount.currency;
 
@@ -451,6 +471,19 @@ export async function batchCreateTransactions(
           creditMinor = debitMinor;
         }
 
+        // Overdraft check for asset-to-asset transfers: credit side is the source account
+        const isTransfer =
+          (creditAccount.type === "asset" || creditAccount.type === "liability") &&
+          (debitAccount.type === "asset" || debitAccount.type === "liability");
+        if (isTransfer) {
+          const srcBalance = await getBalanceInTx(tx, input.creditAccountId);
+          if (srcBalance - creditMinor < 0n) {
+            throw new Error(
+              `Insufficient balance in source account. Available: ${formatMoney(srcBalance < 0n ? 0n : srcBalance, creditAccount.currency)}, required: ${formatMoney(creditMinor, creditAccount.currency)}.`,
+            );
+          }
+        }
+
         await createJournalEntry(
           input.userId,
           input.date,
@@ -461,6 +494,7 @@ export async function batchCreateTransactions(
             { accountId: input.creditAccountId, amount: -creditMinor, currency: creditAccount.currency },
           ],
           tx,
+          input.idempotencyKey,
         );
 
         // Accumulate per-currency subtotals (using debit account's currency)
@@ -511,7 +545,6 @@ export async function batchDeleteTransactions(
 export async function getTransactions(
   filters: TransactionFilters,
 ): Promise<TransactionRow[]> {
-  const baseCurrency = filters.currency ?? "USD";
   const whereClause = sql.join(buildConditions(filters), sql` AND `);
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;
@@ -763,6 +796,7 @@ export async function getSpendingSummary(
     JOIN journal_entries je ON jl.journal_entry_id = je.id
     JOIN accounts        a  ON jl.account_id = a.id
     WHERE je.user_id = ${userId}
+      AND je.deleted_at IS NULL
       AND je.date::date BETWEEN ${startDate} AND ${endDate}
       AND a.type   = 'expense'
       AND jl.amount > 0
@@ -820,6 +854,7 @@ export async function getIncomeSummary(
     JOIN journal_entries je ON jl.journal_entry_id = je.id
     JOIN accounts        a  ON jl.account_id = a.id
     WHERE je.user_id = ${userId}
+      AND je.deleted_at IS NULL
       AND je.date::date BETWEEN ${startDate} AND ${endDate}
       AND a.type   = 'income'
       AND jl.amount < 0
@@ -876,6 +911,7 @@ export async function getCashFlow(
     JOIN journal_entries je ON jl.journal_entry_id = je.id
     JOIN accounts        a  ON jl.account_id = a.id
     WHERE je.user_id = ${userId}
+      AND je.deleted_at IS NULL
       AND je.date::date BETWEEN ${startDate} AND ${endDate}
       AND (
         (a.type = 'income' AND jl.amount < 0)

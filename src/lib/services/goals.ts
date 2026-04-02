@@ -12,8 +12,8 @@
  */
 
 import { db } from "@/lib/db";
-import { goals, accounts } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { goals, accounts, journalEntries, journalLines } from "@/lib/db/schema";
+import { eq, and, sql, isNull } from "drizzle-orm";
 import { getAccountBalances, createJournalEntry, type Tx } from "./ledger";
 import { toMinorUnits, toMajorUnits, formatMoney } from "./money";
 import { getRates, convert } from "./fx-rates";
@@ -202,6 +202,22 @@ export async function getGoalsTotalBalance(
   return total;
 }
 
+// ── Internal balance check ────────────────────────────────────────────────
+
+/**
+ * Query the current balance of an account within the given transaction context.
+ * Returns the net sum of all journal_lines.amount for that account (minor units).
+ * For asset accounts: positive = funds available.
+ */
+async function getBalanceInTx(tx: Tx, accountId: string): Promise<bigint> {
+  const [row] = await tx
+    .select({ balance: sql<string>`COALESCE(SUM(${journalLines.amount}), 0)` })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+    .where(and(eq(journalLines.accountId, accountId), isNull(journalEntries.deletedAt)));
+  return BigInt(row?.balance ?? "0");
+}
+
 // ── Fund / Withdraw ───────────────────────────────────────────────────────
 
 /**
@@ -217,6 +233,7 @@ export async function fundGoal(
   date: string,
   creditAmount?: number, // major units in goal's currency — for cross-currency
   exchangeRate?: number, // source currency → goal currency conversion rate
+  idempotencyKey?: string,
 ) {
   if (amount <= 0) throw new Error("Amount must be positive");
 
@@ -241,9 +258,10 @@ export async function fundGoal(
       .from(accounts)
       .where(eq(accounts.id, goal.accountId))
       .limit(1);
+    if (!goalAccount) throw new Error("Goal account not found");
 
     const srcCurrency = srcAccount.currency;
-    const goalCurrency = goalAccount!.currency;
+    const goalCurrency = goalAccount.currency;
 
     let srcMinor: bigint;
     let goalMinor: bigint;
@@ -282,6 +300,14 @@ export async function fundGoal(
       goalMinor = toMinorUnits(resolvedCreditAmount, goalCurrency);
     }
 
+    // Overdraft check: ensure source account has sufficient balance (in its own currency)
+    const srcBalance = await getBalanceInTx(tx, sourceAccountId);
+    if (srcBalance - srcMinor < 0n) {
+      throw new Error(
+        `Insufficient balance in source account. Available: ${formatMoney(srcBalance < 0n ? 0n : srcBalance, srcCurrency)}, required: ${formatMoney(srcMinor, srcCurrency)}.`,
+      );
+    }
+
     await createJournalEntry(
       userId,
       date,
@@ -292,6 +318,7 @@ export async function fundGoal(
         { accountId: sourceAccountId, amount: -srcMinor, currency: srcCurrency }, // credit source
       ],
       tx,
+      idempotencyKey,
     );
 
     const balances = await getAccountBalances([goal.accountId]);
@@ -312,6 +339,7 @@ export async function withdrawFromGoal(
   date: string,
   creditAmount?: number, // major units in destination's currency — for cross-currency
   exchangeRate?: number, // goal currency → destination currency conversion rate
+  idempotencyKey?: string,
 ) {
   if (amount <= 0) throw new Error("Amount must be positive");
 
@@ -337,8 +365,9 @@ export async function withdrawFromGoal(
       .from(accounts)
       .where(eq(accounts.id, goal.accountId))
       .limit(1);
+    if (!goalAccount) throw new Error("Goal account not found");
 
-    const goalCurrency = goalAccount!.currency;
+    const goalCurrency = goalAccount.currency;
     const dstCurrency = dstAccount.currency;
 
     let goalMinor: bigint;
@@ -388,10 +417,45 @@ export async function withdrawFromGoal(
         { accountId: goal.accountId, amount: -goalMinor, currency: goalCurrency }, // credit goal
       ],
       tx,
+      idempotencyKey,
     );
 
     const balances = await getAccountBalances([goal.accountId]);
     return formatGoal(goal, balances.get(goal.accountId) ?? 0n, goalCurrency);
+  });
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────
+
+/**
+ * Delete a goal and its backing account.
+ * Refused if the goal has any associated transactions (journal lines on its backing account).
+ * The caller should withdraw all funds first before deleting.
+ */
+export async function deleteGoal(goalId: string, userId: string): Promise<void> {
+  return db.transaction(async (tx: Tx) => {
+    const [existing] = await tx
+      .select({ accountId: goals.accountId })
+      .from(goals)
+      .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
+      .limit(1);
+    if (!existing) throw new Error("Goal not found");
+
+    const [line] = await tx
+      .select({ journalEntryId: journalLines.journalEntryId })
+      .from(journalLines)
+      .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+      .where(and(eq(journalLines.accountId, existing.accountId), isNull(journalEntries.deletedAt)))
+      .limit(1);
+
+    if (line) {
+      throw new Error(
+        "Cannot delete a goal that has transactions. Withdraw all funds first, then delete.",
+      );
+    }
+
+    // Delete backing account — cascades to goal row
+    await tx.delete(accounts).where(eq(accounts.id, existing.accountId));
   });
 }
 
@@ -400,8 +464,11 @@ export async function withdrawFromGoal(
 export interface BatchFundGoalItem {
   goalId: string;
   sourceAccountId: string;
-  amount: number; // major units, positive
+  amount: number; // major units, positive — in source account's currency
+  creditAmount?: number; // major units in goal's currency — for cross-currency
+  exchangeRate?: number; // source currency → goal currency conversion rate
   date: string;
+  idempotencyKey?: string;
 }
 
 /**
@@ -440,18 +507,51 @@ export async function batchFundGoals(
           .from(accounts)
           .where(eq(accounts.id, goal.accountId))
           .limit(1);
+        if (!goalAccount) throw new Error("Goal account not found");
 
         const srcCurrency = srcAccount.currency;
-        const goalCurrency = goalAccount!.currency;
-        const srcMinor = toMinorUnits(item.amount, srcCurrency);
+        const goalCurrency = goalAccount.currency;
 
+        let srcMinor: bigint;
         let goalMinor: bigint;
+
         if (srcCurrency === goalCurrency) {
+          srcMinor = toMinorUnits(item.amount, srcCurrency);
           goalMinor = srcMinor;
         } else {
-          const rates = await getRates();
-          const goalMajor = convert(item.amount, srcCurrency, goalCurrency, rates);
-          goalMinor = toMinorUnits(goalMajor, goalCurrency);
+          // Cross-currency: require explicit 2-of-3 resolution — no silent FX lookups
+          const hasAmount = item.amount > 0;
+          const hasCreditAmount = item.creditAmount !== undefined && item.creditAmount > 0;
+          const hasRate = item.exchangeRate !== undefined && item.exchangeRate > 0;
+
+          let resolvedAmount = item.amount;
+          let resolvedCreditAmount = item.creditAmount ?? 0;
+
+          if (hasAmount && hasCreditAmount) {
+            // Both amounts provided — use them directly
+          } else if (hasAmount && hasRate) {
+            resolvedCreditAmount = resolvedAmount * item.exchangeRate!;
+          } else if (hasCreditAmount && hasRate) {
+            resolvedAmount = resolvedCreditAmount / item.exchangeRate!;
+          } else {
+            throw new Error(
+              `Cross-currency goal funding requires at least two of: amount, creditAmount, exchangeRate. ` +
+              `Source account uses ${srcCurrency}, goal uses ${goalCurrency}. ` +
+              `Provide any two of: amount (${srcCurrency}) + creditAmount (${goalCurrency}), ` +
+              `amount + exchangeRate, or creditAmount + exchangeRate.`,
+            );
+          }
+
+          srcMinor = toMinorUnits(resolvedAmount, srcCurrency);
+          goalMinor = toMinorUnits(resolvedCreditAmount, goalCurrency);
+        }
+
+        // Overdraft check: ensure source account has sufficient balance (in its own currency)
+        const srcBalance = await getBalanceInTx(tx, item.sourceAccountId);
+        if (srcBalance - srcMinor < 0n) {
+          throw new Error(
+            `Insufficient balance in source account. Available: ${formatMoney(srcBalance < 0n ? 0n : srcBalance, srcCurrency)}, required: ${formatMoney(srcMinor, srcCurrency)}.`,
+          );
         }
 
         await createJournalEntry(
@@ -464,6 +564,7 @@ export async function batchFundGoals(
             { accountId: item.sourceAccountId, amount: -srcMinor, currency: srcCurrency },
           ],
           tx,
+          item.idempotencyKey,
         );
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Operation failed";

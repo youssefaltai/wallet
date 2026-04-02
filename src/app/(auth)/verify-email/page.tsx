@@ -40,18 +40,23 @@ function VerifyEmailContent() {
   useEffect(() => {
     if (!userId || hasFetched.current) return;
     hasFetched.current = true;
+    const controller = new AbortController();
     fetch("/api/auth/user-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
+      signal: controller.signal,
     })
       .then((r) => r.json())
       .then((data) => {
         if (data.maskedEmail) setEmail(data.maskedEmail);
       })
-      .catch(() => {
-        // Silently fail — the page still works without the display email
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          // Silently fail — the page still works without the display email
+        }
       });
+    return () => controller.abort();
   }, [userId]);
 
   function handleDigitChange(index: number, value: string) {

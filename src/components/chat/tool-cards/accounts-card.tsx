@@ -10,6 +10,8 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   liability: "Credit & Loans",
 };
 
+const MAX_INLINE_ITEMS = 12;
+
 interface Account {
   id: string;
   name: string;
@@ -34,9 +36,13 @@ export function AccountsCard({ output }: { output: unknown }) {
 
   if (data.accounts.length === 0) return null;
 
+  const displayedAccounts = data.accounts.slice(0, MAX_INLINE_ITEMS);
+  const hasMore = data.accounts.length > MAX_INLINE_ITEMS;
+
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-      {data.accounts.map((account) => (
+    <div className="space-y-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        {displayedAccounts.map((account) => (
         <Card
           key={account.id}
           className="cursor-pointer transition-colors hover:bg-muted/50"
@@ -62,6 +68,15 @@ export function AccountsCard({ output }: { output: unknown }) {
           </CardContent>
         </Card>
       ))}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => router.push("/accounts")}
+          className="w-full py-2 px-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
+        >
+          View all {data.accounts.length} accounts
+        </button>
+      )}
     </div>
   );
 }

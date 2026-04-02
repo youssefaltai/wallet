@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cachedAuth } from "@/lib/auth";
-import { parseMonthParam } from "@/lib/utils/parse-month";
+import { getCurrentDate } from "@/lib/utils/date";
 import { redirect } from "next/navigation";
 import { getGoals } from "@/lib/services/goals";
 import { getAccountsWithBalances } from "@/lib/services/accounts";
@@ -19,11 +19,17 @@ export default async function GoalsPage({
   const params = await searchParams;
 
   const currency = session.user.currency;
-  const { monthKey: currentMonth } = parseMonthParam(params.date);
-  const [goals, accounts] = await Promise.all([
-    getGoals(session.user.id, { deadlineMonth: currentMonth }),
+  const today = getCurrentDate();
+  const selectedDate = params.date ?? today;
+  const [allGoals, accounts] = await Promise.all([
+    getGoals(session.user.id),
     getAccountsWithBalances(session.user.id, currency),
   ]);
+
+  // Filter out goals with deadlines before the selected date
+  const goals = allGoals.filter(
+    (goal) => !goal.deadline || goal.deadline >= selectedDate
+  );
 
   // Only show active asset accounts as funding sources
   const fundingAccounts = accounts.filter((a) => a.isActive && !["credit card", "loan", "mortgage", "debt"].includes(a.type.toLowerCase()));

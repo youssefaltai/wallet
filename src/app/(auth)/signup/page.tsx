@@ -26,9 +26,19 @@ export default function SignupPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-    const name = formData.get("name") as string;
+    const emailValue = formData.get("email");
+    const passwordValue = formData.get("password");
+    const nameValue = formData.get("name");
+
+    if (!emailValue || !passwordValue || !nameValue) {
+      setError("All fields are required");
+      setLoading(false);
+      return;
+    }
+
+    const email = emailValue.toString();
+    const password = passwordValue.toString();
+    const name = nameValue.toString();
 
     const res = await fetch("/api/auth/signup", {
       method: "POST",

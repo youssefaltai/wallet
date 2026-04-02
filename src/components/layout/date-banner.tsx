@@ -18,12 +18,14 @@ export function DateBanner() {
   // Keep the displayed date text until the exit animation completes
   useEffect(() => {
     if (isActive) {
-      setDisplayDate(date);
-      // Trigger enter on next frame so the transition runs
-      requestAnimationFrame(() => setVisible(true));
+      // Schedule state updates asynchronously to avoid synchronous setState in effect
+      queueMicrotask(() => {
+        setDisplayDate(date);
+        requestAnimationFrame(() => setVisible(true));
+      });
     } else if (prevActive.current) {
       // Start exit transition; displayDate stays so text doesn't vanish mid-fade
-      setVisible(false);
+      queueMicrotask(() => setVisible(false));
     }
     prevActive.current = isActive;
   }, [isActive, date]);

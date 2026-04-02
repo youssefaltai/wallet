@@ -110,7 +110,8 @@ export async function deleteCategory(
   userId: string,
   categoryId: string,
 ): Promise<void> {
-  // Will fail with FK violation if any journal lines reference this category,
+  // Deletes the category and cascades to any budgets using it.
+  // Will fail with FK violation only if journal lines reference this category,
   // which is correct — the user must reassign those transactions first.
   await db
     .delete(accounts)
@@ -152,7 +153,7 @@ export async function getCategoryTotals(
   userId: string,
   type: CategoryType,
   month: string,
-  currency = "USD",
+  _currency = "USD",
 ): Promise<CategoryWithTotal[]> {
   const [y, m] = month.split("-").map(Number);
   const startDate = `${y}-${String(m).padStart(2, "0")}-01`;
@@ -187,6 +188,7 @@ export async function getCategoryTotals(
       ON jl.journal_entry_id = je.id
       AND je.date >= ${startDate}
       AND je.date < ${endDate}
+      AND je.deleted_at IS NULL
     WHERE a.user_id = ${userId}
       AND a.type = ${type}
     GROUP BY a.id, a.name, a.type, a.currency

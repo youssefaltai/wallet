@@ -5,7 +5,7 @@ export default function NotFound() {
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 animate-fade-up">
       <h2 className="text-lg font-semibold">Page not found</h2>
       <p className="text-sm text-muted-foreground">
-        The page you're looking for doesn't exist.
+        The page you&apos;re looking for doesn&apos;t exist.
       </p>
       <Link
         href="/"

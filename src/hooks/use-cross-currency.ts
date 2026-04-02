@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { getDecimalPlaces } from "@/lib/constants/currencies";
 
 type Field = "amount" | "creditAmount" | "exchangeRate";
@@ -34,10 +34,13 @@ export function useCrossCurrency(
   const creditAmountRef = useRef(creditAmount);
   const exchangeRateRef = useRef(exchangeRate);
 
-  // Keep refs in sync with state
-  amountRef.current = amount;
-  creditAmountRef.current = creditAmount;
-  exchangeRateRef.current = exchangeRate;
+  // Keep refs in sync with state (useLayoutEffect runs after render but before paint,
+  // so handlers always see fresh values without causing "ref access during render")
+  useLayoutEffect(() => {
+    amountRef.current = amount;
+    creditAmountRef.current = creditAmount;
+    exchangeRateRef.current = exchangeRate;
+  });
 
   const debitDecimals = getDecimalPlaces(debitCurrency);
   const creditDecimals = getDecimalPlaces(creditCurrency);

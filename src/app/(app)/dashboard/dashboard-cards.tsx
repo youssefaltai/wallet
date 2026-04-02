@@ -78,15 +78,12 @@ export function DashboardAccountCards({
 export function DashboardBudgetCards({
   budgets,
   baseDelay,
-  currency = "USD",
 }: {
   budgets: BudgetStatus[];
   baseDelay: number;
   currency?: string;
 }) {
   const router = useRouter();
-  const fmt = (n: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency }).format(n);
 
   return (
     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">

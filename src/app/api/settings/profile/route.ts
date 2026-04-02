@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { getUserProfile, updateUserProfile, checkEmailTaken } from "@/lib/services/users";
 import { sendVerificationEmail } from "@/lib/services/email";
 import { rateLimit } from "@/lib/rate-limit";
+import { db } from "@/lib/db";
+import { accounts } from "@/lib/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -92,12 +95,36 @@ export async function PATCH(req: Request) {
         emailVerified: false,
       });
 
+      if (updates.currency) {
+        await db
+          .update(accounts)
+          .set({ currency: updates.currency })
+          .where(
+            and(
+              eq(accounts.userId, userId),
+              inArray(accounts.type, ["expense", "income"]),
+            ),
+          );
+      }
+
       await sendVerificationEmail(userId, email);
 
       return NextResponse.json({ needsVerification: true, email });
     }
 
     await updateUserProfile(userId, updates);
+
+    if (updates.currency) {
+      await db
+        .update(accounts)
+        .set({ currency: updates.currency })
+        .where(
+          and(
+            eq(accounts.userId, userId),
+            inArray(accounts.type, ["expense", "income"]),
+          ),
+        );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -25,6 +25,21 @@ export function toMajorUnits(minor: bigint, currency = "USD"): number {
   return Number(minor) / factor;
 }
 
+/**
+ * Parse a user-supplied or AI-generated amount value.
+ * Accepts a raw number or a formatted string like "1,234.56", "EGP 1,234.56", "$1,234".
+ * Returns the numeric value in major units.
+ */
+export function parseAmount(val: number | string): number {
+  if (typeof val === "number") return val;
+  // Strip everything except digits, period, comma, minus — then remove grouping commas
+  const cleaned = val.replace(/[^\d.,-]/g, "").replace(/,/g, "");
+  if (cleaned === "") throw new Error(`Cannot parse amount: "${val}"`);
+  const parsed = parseFloat(cleaned);
+  if (isNaN(parsed)) throw new Error(`Cannot parse amount: "${val}"`);
+  return parsed;
+}
+
 /** Format minor units as a display string like "$50.00". */
 export function formatMoney(
   minor: bigint,

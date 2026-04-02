@@ -32,6 +32,12 @@ const LATEST_TTL_MS = 60 * 60 * 1000;
 
 // ── Fetch & cache ────────────────────────────────────────────────────────
 
+/** Return type for getRatesWithMeta — rates plus when they were fetched. */
+export interface RatesWithMeta {
+  rates: Rates;
+  fetchedAt: Date;
+}
+
 /**
  * Get exchange rates for a given date (defaults to latest).
  * Checks in-memory cache → DB cache → API, in that order.
@@ -103,6 +109,20 @@ export async function getRates(date?: string): Promise<Rates> {
   return rates;
 }
 
+/**
+ * Same as getRates() but also returns when the rates were fetched.
+ * Use this when callers need to surface the "rates fetched at" timestamp
+ * (e.g. labeling approximate net worth figures on the dashboard).
+ */
+export async function getRatesWithMeta(date?: string): Promise<RatesWithMeta> {
+  const rates = await getRates(date);
+  const cacheKey = date ?? "latest";
+  const cached = memoryCache.get(cacheKey);
+  // fetchedAt is stored as a unix timestamp (ms) in the cache entry
+  const fetchedAt = cached ? new Date(cached.fetchedAt) : new Date();
+  return { rates, fetchedAt };
+}
+
 async function fetchFromApi(date?: string): Promise<Rates | null> {
   const appId = process.env.OPEN_EXCHANGE_RATES_APP_ID;
   if (!appId) {
@@ -167,6 +187,9 @@ export function convert(
 
   if (fromRate === undefined || toRate === undefined) {
     throw new Error(`Missing exchange rate for ${fromRate === undefined ? from : to}`);
+  }
+  if (fromRate <= 0 || toRate <= 0) {
+    throw new Error(`Invalid exchange rate: ${from}=${fromRate}, ${to}=${toRate}`);
   }
 
   // amount in USD = amount / fromRate

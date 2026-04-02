@@ -57,6 +57,31 @@ export async function deleteBudget(userId: string, budgetId: string) {
   return deleted;
 }
 
+export async function batchDeleteBudgets(
+  budgetIds: string[],
+  userId: string,
+): Promise<{ count: number }> {
+  if (budgetIds.length === 0) throw new Error("No budgets to delete");
+  if (budgetIds.length > 50) throw new Error("Maximum 50 budgets per batch");
+
+  return db.transaction(async (tx) => {
+    for (let i = 0; i < budgetIds.length; i++) {
+      try {
+        const [deleted] = await tx
+          .delete(budgets)
+          .where(and(eq(budgets.id, budgetIds[i]), eq(budgets.userId, userId)))
+          .returning({ id: budgets.id });
+        if (!deleted) throw new Error("Budget not found");
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Operation failed";
+        if (msg.startsWith("Item ")) throw error;
+        throw new Error(`Item ${i}: ${msg}`);
+      }
+    }
+    return { count: budgetIds.length };
+  });
+}
+
 export async function updateBudget(
   budgetId: string,
   userId: string,
@@ -126,6 +151,7 @@ export interface BatchBudgetItem {
   startMonth: string; // "YYYY-MM"
   months: number; // 1–12
   nameTemplate?: string; // default: "{month} {category}"
+  currency?: string; // ISO 4217 currency code (defaults to session currency)
 }
 
 const MONTH_NAMES = [
@@ -156,7 +182,8 @@ export async function batchCreateBudgets(
       }
 
       try {
-        const cat = await resolveCategory(userId, item.category, "expense", currency, tx);
+        const itemCurrency = item.currency ?? currency;
+        const cat = await resolveCategory(userId, item.category, "expense", itemCurrency, tx);
         const template = item.nameTemplate ?? "{month} {category}";
 
         const [startYear, startMonthNum] = item.startMonth.split("-").map(Number);
@@ -237,6 +264,7 @@ export async function getBudgetById(
     FROM journal_lines jl
     JOIN journal_entries je ON jl.journal_entry_id = je.id
     WHERE je.user_id = ${userId}
+      AND je.deleted_at IS NULL
       AND jl.account_id = ${budget.categoryAccountId}
       AND jl.amount > 0
       AND je.date BETWEEN ${budget.startDate} AND ${budget.endDate}
@@ -345,6 +373,7 @@ export async function getBudgetStatuses(
     FROM journal_lines jl
     JOIN journal_entries je ON jl.journal_entry_id = je.id
     WHERE je.user_id = ${userId}
+      AND je.deleted_at IS NULL
   `);
 
   return rows.map((r, i) => {

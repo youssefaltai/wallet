@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 import {
   getConversations,
   getArchivedConversations,
@@ -17,6 +18,9 @@ export async function GET(req: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { allowed } = await rateLimit(`settings-chats-get:${session.user.id}`, 60, 60_000);
+    if (!allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
     const { searchParams } = new URL(req.url);
     const archived = searchParams.get("archived") === "true";
@@ -50,6 +54,9 @@ export async function PATCH(req: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { allowed } = await rateLimit(`settings-chats-patch:${session.user.id}`, 20, 60_000);
+    if (!allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
     const body = await req.json();
     const { action, chatId } = body;
@@ -86,6 +93,9 @@ export async function DELETE(req: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { allowed } = await rateLimit(`settings-chats-delete:${session.user.id}`, 10, 60_000);
+    if (!allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
     const { searchParams } = new URL(req.url);
     const chatId = searchParams.get("id");

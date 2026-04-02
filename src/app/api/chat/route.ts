@@ -19,6 +19,16 @@ import {
 import { getMemoriesForContext } from "@/lib/services/memories";
 import { rateLimit } from "@/lib/rate-limit";
 
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): Promise<T> {
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); } catch (err) {
+      if (i === attempts - 1) throw err;
+      await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw new Error("unreachable");
+}
+
 export async function POST(req: Request) {
   try {
   const session = await auth();
@@ -91,11 +101,11 @@ export async function POST(req: Request) {
 
   let memoriesContext = "";
   if (memoryRows.length > 0) {
-    const escape = (s: string) => s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const formatted = memoryRows
       .map((m) => {
         const escapedTags = m.tags?.map(escape);
-        return `<memory id="${m.id}">${escape(m.content)}${escapedTags?.length ? ` (tags: ${escapedTags.join(", ")})` : ""}</memory>`;
+        return `<memory id="${escape(m.id)}">${escape(m.content)}${escapedTags?.length ? ` (tags: ${escapedTags.join(", ")})` : ""}</memory>`;
       })
       .join("\n");
     memoriesContext = `## User memories\n${formatted}`;
@@ -107,9 +117,9 @@ export async function POST(req: Request) {
     const header = "## User memories\n";
     let truncated = header;
     for (const m of memoryRows) {
-      const escape = (s: string) => s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       const escapedTags = m.tags?.map(escape);
-      const line = `<memory id="${m.id}">${escape(m.content)}${escapedTags?.length ? ` (tags: ${escapedTags.join(", ")})` : ""}</memory>\n`;
+      const line = `<memory id="${escape(m.id)}">${escape(m.content)}${escapedTags?.length ? ` (tags: ${escapedTags.join(", ")})` : ""}</memory>\n`;
       if (truncated.length + line.length > MEMORY_CHAR_BUDGET) break;
       truncated += line;
     }
@@ -137,11 +147,6 @@ export async function POST(req: Request) {
       {
         role: "system" as const,
         content: SYSTEM_PROMPT,
-        providerOptions: {
-          anthropic: {
-            cacheControl: { type: "ephemeral" as const },
-          },
-        },
       },
       {
         role: "system" as const,
@@ -152,20 +157,14 @@ export async function POST(req: Request) {
             {
               role: "system" as const,
               content: memoriesContext,
-              providerOptions: {
-                anthropic: {
-                  cacheControl: { type: "ephemeral" as const },
-                },
-              },
             },
           ]
         : []),
     ],
     messages: modelMessages,
     tools,
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(25),
     onFinish: async ({ text, usage, steps }) => {
-      try {
       // Build parts in natural order: iterate steps to preserve
       // the exact sequence of text and tool calls as the model produced them.
       const orderedParts: Array<
@@ -194,27 +193,38 @@ export async function POST(req: Request) {
       }
 
       if (orderedParts.length > 0) {
-        await saveAssistantMessage(finalConvId, orderedParts, text, usage?.totalTokens ?? null);
+        try {
+          await withRetry(() =>
+            saveAssistantMessage(finalConvId, orderedParts, text, usage?.totalTokens ?? null)
+          );
+        } catch (err) {
+          console.error(
+            "[chat:onFinish] saveAssistantMessage failed after 3 attempts",
+            { conversationId: finalConvId, partCount: orderedParts.length },
+            err,
+          );
+        }
       }
 
-      // Title from first user message
-      if (incomingMessages.length <= 1 && text) {
-        const titleSource =
-          typeof lastMessage?.content === "string"
-            ? lastMessage.content
-            : Array.isArray(lastMessage?.parts)
-              ? lastMessage.parts
-                  .filter((p: { type: string }) => p.type === "text")
-                  .map((p: { text: string }) => p.text)
-                  .join("")
-              : "";
-        const title = titleSource.slice(0, 100) || "New conversation";
-        await updateConversationTitle(finalConvId, title);
-      } else {
-        await touchConversation(finalConvId);
-      }
+      // Title from first user message (non-critical — failures are logged but not retried)
+      try {
+        if (incomingMessages.length <= 1 && text) {
+          const titleSource =
+            typeof lastMessage?.content === "string"
+              ? lastMessage.content
+              : Array.isArray(lastMessage?.parts)
+                ? lastMessage.parts
+                    .filter((p: { type: string }) => p.type === "text")
+                    .map((p: { text: string }) => p.text)
+                    .join("")
+                : "";
+          const title = titleSource.slice(0, 100) || "New conversation";
+          await updateConversationTitle(finalConvId, title);
+        } else {
+          await touchConversation(finalConvId);
+        }
       } catch (err) {
-        console.error("[chat:onFinish]", err);
+        console.error("[chat:onFinish] title/touch update failed", { conversationId: finalConvId }, err);
       }
     },
   });

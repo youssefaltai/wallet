@@ -1,14 +1,15 @@
-import { test, expect } from "../../fixtures/auth";
+import { test, expect, db } from "../../fixtures/auth";
 import {
   seedConversation,
   seedMessage,
   seedAccount,
   seedBalance,
-  seedMemory,
   seedCategoryAccount,
   seedExpense,
   seedBudget,
 } from "../../fixtures/db-helpers";
+import * as schema from "../../../src/lib/db/schema";
+import { inArray } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -588,5 +589,47 @@ test.describe("AI Chat", () => {
     const responseText = await responseArea.allTextContents();
     const combined = responseText.join(" ");
     expect(combined).toMatch(/net worth|35,000|35000/i);
+  });
+
+  // 19. AI can delete multiple budgets at once
+  test("AI can delete multiple budgets at once", async ({
+    authedPage: page,
+    testUser,
+  }) => {
+    test.setTimeout(90_000);
+
+    // Seed a category
+    const category = await seedCategoryAccount(testUser.id, "Rent", "expense");
+
+    // Seed two budgets
+    const b1 = await seedBudget(testUser.id, category.id, {
+      name: "April Rent",
+      amount: 500,
+      startDate: "2026-04-01",
+      endDate: "2026-04-30",
+    });
+    const b2 = await seedBudget(testUser.id, category.id, {
+      name: "May Rent",
+      amount: 500,
+      startDate: "2026-05-01",
+      endDate: "2026-05-31",
+    });
+
+    await page.goto("/chat");
+    await sendMessage(page, "Delete my April and May Rent budgets");
+
+    // Should call get_budget_status first to find the budgets
+    await waitForToolCompletion(page, "Checked budgets");
+
+    // Then batch delete should complete
+    await waitForToolCompletion(page, "Budgets deleted");
+    await waitForAssistantResponse(page);
+
+    // Verify both budgets are deleted from the database
+    const remaining = await db
+      .select()
+      .from(schema.budgets)
+      .where(inArray(schema.budgets.id, [b1.id, b2.id]));
+    expect(remaining).toHaveLength(0);
   });
 });

@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useErrorDialog } from "@/hooks/use-error-dialog";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
-import { Landmark, CreditCard, ArrowLeft, ArrowRightIcon, PencilIcon, PowerIcon, WalletIcon } from "lucide-react";
+import { Landmark, CreditCard, ArrowLeft, ArrowRightIcon, PencilIcon, PowerIcon, WalletIcon, SlidersHorizontalIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +34,7 @@ import {
   createAccountAction,
   updateAccountAction,
   toggleAccountAction,
+  adjustAccountBalanceAction,
 } from "../actions";
 import { AnimateIn } from "@/components/shared/animate-in";
 import { QuickPayDialog } from "@/components/shared/quick-pay-dialog";
@@ -82,6 +83,7 @@ export function AccountList({
   const [editOpen, setEditOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountWithBalance | null>(null);
   const [payAccountId, setPayAccountId] = useState<string | null>(null);
+  const [adjustingAccount, setAdjustingAccount] = useState<AccountWithBalance | null>(null);
 
   const assetAccounts = useMemo(
     () => accounts.filter((a) => a.type === "asset" && a.isActive),
@@ -323,6 +325,12 @@ export function AccountList({
                             Edit Account
                           </ContextMenuItem>
                           <ContextMenuItem
+                            onClick={() => setAdjustingAccount(account)}
+                          >
+                            <SlidersHorizontalIcon />
+                            Adjust Balance
+                          </ContextMenuItem>
+                          <ContextMenuItem
                             onClick={async () => {
                               if (account.isActive) {
                                 if (!(await confirm(`Deactivate "${account.name}"? It will be hidden from balances and transaction forms.`))) return;
@@ -361,6 +369,55 @@ export function AccountList({
           }}
         />
       )}
+
+      {/* Adjust Balance Dialog */}
+      <Dialog open={!!adjustingAccount} onOpenChange={(open) => { if (!open) setAdjustingAccount(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adjust Balance</DialogTitle>
+          </DialogHeader>
+          {adjustingAccount && (
+            <form
+              action={async (formData) => {
+                const raw = formData.get("newBalance");
+                const newBalance = typeof raw === "string" ? parseFloat(raw) : NaN;
+                if (isNaN(newBalance) || newBalance < 0) {
+                  showError("Please enter a valid non-negative balance.");
+                  return;
+                }
+                const result = await adjustAccountBalanceAction(adjustingAccount.id, newBalance);
+                if (result?.error) {
+                  showError(result.error);
+                  return;
+                }
+                setAdjustingAccount(null);
+                router.refresh();
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Current balance</p>
+                <p className="text-xl font-semibold">{adjustingAccount.balanceFormatted}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adjust-balance">New Balance ({adjustingAccount.currency})</Label>
+                <Input
+                  id="adjust-balance"
+                  name="newBalance"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full">
+                Apply Adjustment
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Account Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

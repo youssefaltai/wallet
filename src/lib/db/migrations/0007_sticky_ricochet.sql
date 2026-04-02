@@ -1,0 +1,2 @@
+ALTER TABLE "journal_entries" ADD COLUMN "idempotency_key" text;--> statement-breakpoint
+ALTER TABLE "journal_entries" ADD CONSTRAINT "journal_entries_idempotency_key_unique" UNIQUE("idempotency_key");

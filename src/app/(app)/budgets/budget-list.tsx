@@ -54,7 +54,6 @@ import { formatDateRange } from "@/lib/utils/format-date";
 export function BudgetList({
   budgets,
   expenseCategories,
-  currency = "USD",
 }: {
   budgets: BudgetStatus[];
   expenseCategories: Category[];

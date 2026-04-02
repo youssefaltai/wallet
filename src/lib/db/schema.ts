@@ -99,11 +99,19 @@ export const journalEntries = pgTable(
     date: timestamp("date", { withTimezone: true }).notNull().defaultNow(),
     description: text(),
     notes: text(),
+    idempotencyKey: text("idempotency_key").unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("journal_entries_user_date_idx").on(t.userId, t.date)],
+  (t) => [
+    index("journal_entries_user_date_idx").on(t.userId, t.date),
+    index("journal_entries_deleted_at_idx").on(t.deletedAt),
+  ],
 );
 
 export const journalLines = pgTable(
@@ -138,7 +146,7 @@ export const budgets = pgTable(
     name: text().notNull(),
     categoryAccountId: uuid("category_account_id")
       .notNull()
-      .references(() => accounts.id, { onDelete: "restrict" }),
+      .references(() => accounts.id, { onDelete: "cascade" }),
     amount: bigint({ mode: "bigint" }).notNull(), // minor units
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
@@ -148,6 +156,7 @@ export const budgets = pgTable(
   },
   (t) => [
     index("budgets_user_idx").on(t.userId),
+    index("budgets_category_account_idx").on(t.categoryAccountId),
     check("budget_dates_valid", sql`${t.endDate} > ${t.startDate}`),
   ],
 );
@@ -218,7 +227,7 @@ export const messages = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index("messages_conversation_idx").on(t.conversationId),
+    index("messages_conversation_created_idx").on(t.conversationId, t.createdAt),
     check(
       "messages_role_check",
       sql`${t.role} IN ('user', 'assistant', 'tool')`,

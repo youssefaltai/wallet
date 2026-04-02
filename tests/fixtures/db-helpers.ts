@@ -7,7 +7,7 @@
 
 import { db } from "./auth";
 import * as schema from "../../src/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 // ── Accounts ────────────────────────────────────────────────────────────
 

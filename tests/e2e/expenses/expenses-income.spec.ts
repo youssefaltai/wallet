@@ -69,7 +69,7 @@ const CURRENT_DATE = "2025-06-15";
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe("Expenses page", () => {
-  test("1 - empty state when no expenses for the month", async ({ authedPage, testUser }) => {
+  test("1 - empty state when no expenses for the month", async ({ authedPage, testUser: _testUser }) => {
     await navigateToDate(authedPage, "/expenses", CURRENT_DATE);
 
     await expect(authedPage.locator("h1")).toHaveText("Expense Categories");
@@ -262,7 +262,7 @@ test.describe("Expenses page", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe("Income page", () => {
-  test("9 - empty state when no income for the month", async ({ authedPage, testUser }) => {
+  test("9 - empty state when no income for the month", async ({ authedPage, testUser: _testUser }) => {
     await navigateToDate(authedPage, "/income", CURRENT_DATE);
 
     await expect(authedPage.locator("h1")).toHaveText("Income Sources");

@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV === "development";
-
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
@@ -21,21 +19,9 @@ const nextConfig: NextConfig = {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
           },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              // unsafe-inline is required by Next.js for inline hydration scripts.
-              // unsafe-eval is required in dev mode for Turbopack HMR / fast refresh.
-              // TODO: Migrate to nonce-based CSP via middleware for stronger XSS protection.
-              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
-              "font-src 'self' data:",
-              `connect-src 'self'${isDev ? " ws:" : ""}`,
-              "frame-ancestors 'none'",
-            ].join("; "),
-          },
+          // Content-Security-Policy is set dynamically per-request by src/middleware.ts
+          // using a per-request nonce, which removes the need for unsafe-inline in
+          // script-src in production.
         ],
       },
     ];

@@ -14,7 +14,7 @@
 import { db } from "@/lib/db";
 import { accounts, goals } from "@/lib/db/schema";
 import type { ledgerAccountType } from "@/lib/db/schema";
-import { eq, and, notInArray, or } from "drizzle-orm";
+import { eq, and, notInArray, or, sql } from "drizzle-orm";
 import { getAccountBalances, createJournalEntry, type Tx } from "./ledger";
 import { toMajorUnits, toMinorUnits, formatMoney } from "./money";
 
@@ -159,6 +159,7 @@ export async function updateAccount(
  * Find or create an account by (userId, name).
  * Used by the categories service to idempotently ensure a category account exists.
  * The unique constraint is on (userId, name), so type is only used on insert.
+ * If the account already exists with a different currency, its currency is updated.
  */
 export async function getOrCreateAccount(
   userId: string,
@@ -167,21 +168,138 @@ export async function getOrCreateAccount(
   currency: string,
   tx: Tx = db,
 ) {
-  const [inserted] = await tx
+  const [upserted] = await tx
     .insert(accounts)
     .values({ userId, name, type, currency })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: [accounts.userId, accounts.name],
+      set: { currency },
+    })
     .returning();
 
-  if (inserted) return inserted;
+  if (!upserted) throw new Error(`Failed to find or create account: ${name}`);
+  return upserted;
+}
 
-  const [existing] = await tx
-    .select()
-    .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.name, name)))
-    .limit(1);
+/**
+ * Move a specific amount between an account and Opening Balance Equity.
+ *
+ * "into_account": equity → account (increases account balance)
+ * "from_account": account → equity (decreases account balance)
+ *
+ * Useful for recording pre-existing transactions (those that happened before
+ * the app was set up) without permanently altering the account's current balance:
+ *   1. equityTransfer(accountId, amount, "into_account")  — temporarily add the amount back
+ *   2. record_expense(amount, accountId)                  — record the actual expense
+ *   Net effect: account balance unchanged, expense appears in the books.
+ */
+export async function equityTransfer(
+  accountId: string,
+  userId: string,
+  amount: number, // major units, positive
+  direction: "into_account" | "from_account",
+  date: string,
+  notes?: string | null,
+): Promise<AccountWithBalance> {
+  await db.transaction(async (tx: Tx) => {
+    const [account] = await tx
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)))
+      .limit(1);
+    if (!account) throw new Error("Account not found");
 
-  return existing!;
+    const minor = toMinorUnits(amount, account.currency);
+    const equity = await getOrCreateEquityAccount(userId, account.currency, tx);
+
+    const lines =
+      direction === "into_account"
+        ? [
+            { accountId: account.id, amount: minor, currency: account.currency },
+            { accountId: equity.id, amount: -minor, currency: account.currency },
+          ]
+        : [
+            { accountId: equity.id, amount: minor, currency: account.currency },
+            { accountId: account.id, amount: -minor, currency: account.currency },
+          ];
+
+    await createJournalEntry(userId, date, "Equity transfer", notes ?? null, lines, tx);
+  });
+
+  const result = await getAccountWithBalance(accountId, userId);
+  if (!result) throw new Error("Account not found after equity transfer");
+  return result;
+}
+
+/**
+ * Correct an account's recorded balance to match reality.
+ * Posts a correcting journal entry against "Opening Balance Equity" —
+ * does not create a fake income/expense transaction.
+ */
+export async function adjustAccountBalance(
+  accountId: string,
+  userId: string,
+  newDisplayBalance: number,
+): Promise<AccountWithBalance> {
+  const run = async (tx: Tx) => {
+    const [account] = await tx
+      .select()
+      .from(accounts)
+      .where(
+        and(
+          eq(accounts.id, accountId),
+          eq(accounts.userId, userId),
+          or(eq(accounts.type, "asset"), eq(accounts.type, "liability")),
+        ),
+      )
+      .limit(1);
+
+    if (!account) throw new Error("Account not found");
+
+    // Serialize concurrent adjustments: block until the previous transaction
+    // holding this row commits, so the subsequent balance read is always fresh.
+    await tx.execute(sql`SELECT id FROM accounts WHERE id = ${accountId} FOR UPDATE`);
+
+    const balances = await getAccountBalances([accountId]);
+    const currentRaw = balances.get(accountId) ?? 0n;
+
+    const newRaw = isLiability(account.type)
+      ? -toMinorUnits(newDisplayBalance, account.currency)
+      : toMinorUnits(newDisplayBalance, account.currency);
+
+    const delta = newRaw - currentRaw;
+    if (delta === 0n) return; // no-op
+
+    const equityAccount = await getOrCreateEquityAccount(userId, account.currency, tx);
+
+    // delta > 0: debit account, credit equity
+    // delta < 0: debit equity, credit account
+    const lines =
+      delta > 0n
+        ? [
+            { accountId: account.id, amount: delta, currency: account.currency },
+            { accountId: equityAccount.id, amount: -delta, currency: account.currency },
+          ]
+        : [
+            { accountId: equityAccount.id, amount: -delta, currency: account.currency },
+            { accountId: account.id, amount: delta, currency: account.currency },
+          ];
+
+    await createJournalEntry(
+      userId,
+      new Date().toISOString(),
+      "Balance adjustment",
+      null,
+      lines,
+      tx,
+    );
+  };
+
+  await db.transaction(run);
+
+  const result = await getAccountWithBalance(accountId, userId);
+  if (!result) throw new Error("Account not found after adjustment");
+  return result;
 }
 
 export interface AccountWithBalance {

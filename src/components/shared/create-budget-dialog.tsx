@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useErrorDialog } from "@/hooks/use-error-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,9 +36,9 @@ export function CreateBudgetDialog({
 
   useEffect(() => {
     if (open && category) {
-      setStartDate("");
-      setEndDate("");
       getBudgetDateRangesAction(category.id).then((result) => {
+        setStartDate("");
+        setEndDate("");
         if (result.data) setExistingRanges(result.data);
       });
     }

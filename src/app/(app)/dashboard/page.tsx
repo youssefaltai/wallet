@@ -6,7 +6,7 @@ import { getAccountsWithBalances, isLiability } from "@/lib/services/accounts";
 import { getCashFlow, getTransactions } from "@/lib/services/transactions";
 import { getBudgetStatuses } from "@/lib/services/budgets";
 import { getGoals } from "@/lib/services/goals";
-import { getRates, convert } from "@/lib/services/fx-rates";
+import { getRatesWithMeta, convert } from "@/lib/services/fx-rates";
 import {
   Card,
   CardContent,
@@ -36,7 +36,7 @@ export default async function DashboardPage({
   const params = await searchParams;
   const userId = session.user.id;
 
-  const { startDate, endDate, monthKey } = parseMonthParam(params.date);
+  const { startDate, endDate } = parseMonthParam(params.date);
   const currency = session.user.currency;
 
   const [accounts, recentTxns, cashFlow, budgets, goals] = await Promise.all([
@@ -51,7 +51,8 @@ export default async function DashboardPage({
 
   // Convert account balances to base currency for aggregation
   const needsConversion = accounts.some((a) => a.currency !== currency);
-  const rates = needsConversion ? await getRates() : null;
+  const ratesMeta = needsConversion ? await getRatesWithMeta() : null;
+  const rates = ratesMeta?.rates ?? null;
 
   function toBase(a: { balance: number; currency: string }) {
     if (a.currency === currency) return a.balance;
@@ -93,7 +94,12 @@ export default async function DashboardPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <NetWorthValue value={netWorth} currency={currency} />
+              <NetWorthValue
+                value={netWorth}
+                currency={currency}
+                isApproximate={needsConversion}
+                ratesFetchedAt={ratesMeta?.fetchedAt ?? null}
+              />
 
               {/* Assets / Liabilities split bar */}
               <div className="space-y-2">

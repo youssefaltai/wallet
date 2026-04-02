@@ -17,8 +17,8 @@
  */
 
 import { db } from "@/lib/db";
-import { accounts, journalEntries, journalLines } from "@/lib/db/schema";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { journalEntries, journalLines } from "@/lib/db/schema";
+import { eq, and, sql, inArray, isNull } from "drizzle-orm";
 import { getRates, convert } from "./fx-rates";
 import { getMinorUnitFactor } from "@/lib/constants/currencies";
 
@@ -45,6 +45,9 @@ const FX_ABS_CAP_USD = 50;
  * For same-currency entries: lines must sum to exactly zero.
  * For cross-currency entries: lines must balance within tolerance when
  * converted to a common currency.
+ *
+ * If idempotencyKey is provided and a matching entry already exists,
+ * the existing entry is returned without inserting a duplicate.
  */
 export async function createJournalEntry(
   userId: string,
@@ -53,6 +56,7 @@ export async function createJournalEntry(
   notes: string | null,
   lines: JournalLine[],
   tx?: Tx,
+  idempotencyKey?: string,
 ) {
   if (lines.length < 2) {
     throw new Error("Journal entry must have at least 2 lines");
@@ -108,9 +112,19 @@ export async function createJournalEntry(
   }
 
   const run = async (conn: Tx) => {
+    // Idempotency check: return existing entry if key already used (only non-deleted)
+    if (idempotencyKey) {
+      const [existing] = await conn
+        .select()
+        .from(journalEntries)
+        .where(and(eq(journalEntries.idempotencyKey, idempotencyKey), isNull(journalEntries.deletedAt)))
+        .limit(1);
+      if (existing) return existing;
+    }
+
     const [entry] = await conn
       .insert(journalEntries)
-      .values({ userId, date: new Date(date), description, notes })
+      .values({ userId, date: new Date(date), description, notes, idempotencyKey: idempotencyKey ?? null })
       .returning();
 
     await conn.insert(journalLines).values(
@@ -147,7 +161,8 @@ export async function getAccountBalances(
       balance: sql<string>`COALESCE(SUM(${journalLines.amount}), 0)`,
     })
     .from(journalLines)
-    .where(inArray(journalLines.accountId, accountIds))
+    .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+    .where(and(inArray(journalLines.accountId, accountIds), isNull(journalEntries.deletedAt)))
     .groupBy(journalLines.accountId);
 
   const map = new Map<string, bigint>();
@@ -160,18 +175,20 @@ export async function getAccountBalances(
   return map;
 }
 
-/** Delete a journal entry and its lines (cascades via FK). */
+/** Soft-delete a journal entry (sets deleted_at). Lines are preserved for audit trail. */
 export async function deleteJournalEntry(
   journalEntryId: string,
   userId: string,
   tx: Tx = db,
 ) {
   await tx
-    .delete(journalEntries)
+    .update(journalEntries)
+    .set({ deletedAt: new Date() })
     .where(
       and(
         eq(journalEntries.id, journalEntryId),
         eq(journalEntries.userId, userId),
+        isNull(journalEntries.deletedAt),
       ),
     );
 }

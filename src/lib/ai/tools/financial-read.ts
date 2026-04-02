@@ -1,5 +1,7 @@
 import { tool } from "ai";
 import * as z from "zod";
+import { moneyInput } from "./amount-schemas";
+import { formatMoney, toMinorUnits } from "@/lib/services/money";
 import { getAccountsWithBalances, isLiability } from "@/lib/services/accounts";
 import {
   getTransactions,
@@ -15,7 +17,7 @@ import {
   getIncomeCategories,
   getCategoryByName,
 } from "@/lib/services/categories";
-import { getRates, convert } from "@/lib/services/fx-rates";
+import { getRates, getRatesWithMeta, convert } from "@/lib/services/fx-rates";
 
 export function createFinancialReadTools(userId: string, currency = "USD") {
   return {
@@ -111,7 +113,16 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       execute: async ({ startDate, endDate }) => {
         try {
           const result = await getSpendingSummary(userId, startDate, endDate, currency);
-          return { ...result, currency };
+          const fmt = (n: number) => formatMoney(toMinorUnits(n, currency), currency);
+          return {
+            ...result,
+            currency,
+            categories: result.categories.map((c) => ({
+              ...c,
+              totalFormatted: fmt(c.total),
+            })),
+            totalSpendingFormatted: fmt(result.totalSpending),
+          };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
         }
@@ -128,7 +139,16 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       execute: async ({ startDate, endDate }) => {
         try {
           const result = await getIncomeSummary(userId, startDate, endDate, currency);
-          return { ...result, currency };
+          const fmt = (n: number) => formatMoney(toMinorUnits(n, currency), currency);
+          return {
+            ...result,
+            currency,
+            categories: result.categories.map((c) => ({
+              ...c,
+              totalFormatted: fmt(c.total),
+            })),
+            totalIncomeFormatted: fmt(result.totalIncome),
+          };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
         }
@@ -141,10 +161,12 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       inputSchema: z.object({
         periodStart: z
           .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
           .optional()
           .describe("Only include budgets overlapping on or after this date (YYYY-MM-DD). Defaults to start of current month."),
         periodEnd: z
           .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
           .optional()
           .describe("Only include budgets overlapping on or before this date (YYYY-MM-DD). Defaults to end of current month."),
       }),
@@ -193,7 +215,8 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
 
           // Convert all account balances to the user's base currency
           const needsConversion = accts.some((a) => a.isActive && a.currency !== currency);
-          const rates = needsConversion ? await getRates() : null;
+          const ratesMeta = needsConversion ? await getRatesWithMeta() : null;
+          const rates = ratesMeta?.rates ?? null;
 
           let assets = 0;
           let liabilities = 0;
@@ -217,14 +240,22 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
 
           const availableToSpend = assets - goalBalance - liabilities;
 
+          const fmt = (n: number) => formatMoney(toMinorUnits(n, currency), currency);
           return {
             netWorth: assets - liabilities,
+            netWorthFormatted: fmt(assets - liabilities),
             availableToSpend,
+            availableToSpendFormatted: fmt(availableToSpend),
             totalAssets: assets,
+            totalAssetsFormatted: fmt(assets),
             totalLiabilities: liabilities,
+            totalLiabilitiesFormatted: fmt(liabilities),
             goalSavings: goalBalance,
+            goalSavingsFormatted: fmt(goalBalance),
             accountCount: accts.length,
             currency,
+            isApproximate: needsConversion,
+            ratesFetchedAt: ratesMeta ? ratesMeta.fetchedAt.toISOString() : null,
           };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
@@ -242,7 +273,14 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       execute: async ({ startDate, endDate }) => {
         try {
           const result = await getCashFlow(userId, startDate, endDate, currency);
-          return { ...result, currency };
+          const fmt = (n: number) => formatMoney(toMinorUnits(n, currency), currency);
+          return {
+            ...result,
+            currency,
+            incomeFormatted: fmt(result.income),
+            expensesFormatted: fmt(result.expenses),
+            netCashFlowFormatted: fmt(result.netCashFlow),
+          };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : "Operation failed" };
         }
@@ -281,9 +319,7 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
       description:
         "Convert an amount between two currencies using live exchange rates. Also useful for looking up the current exchange rate between any two currencies.",
       inputSchema: z.object({
-        amount: z
-          .number()
-          .positive("Amount must be greater than 0")
+        amount: moneyInput
           .describe("The amount to convert"),
         from: z
           .string()
@@ -301,11 +337,14 @@ export function createFinancialReadTools(userId: string, currency = "USD") {
           const rates = await getRates();
           const converted = convert(amount, fromUpper, toUpper, rates);
           const rate = convert(1, fromUpper, toUpper, rates);
+          const convertedAmount = Math.round(converted * getMinorUnitFactor(toUpper)) / getMinorUnitFactor(toUpper);
           return {
             amount,
+            amountFormatted: formatMoney(toMinorUnits(amount, fromUpper), fromUpper),
             from: fromUpper,
             to: toUpper,
-            convertedAmount: Math.round(converted * getMinorUnitFactor(toUpper)) / getMinorUnitFactor(toUpper),
+            convertedAmount,
+            convertedAmountFormatted: formatMoney(toMinorUnits(convertedAmount, toUpper), toUpper),
             rate: Math.round(rate * 10000) / 10000,
           };
         } catch (error) {

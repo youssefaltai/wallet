@@ -22,6 +22,8 @@ interface GoalsData {
   message?: string;
 }
 
+const MAX_INLINE_ITEMS = 12;
+
 export function GoalsCard({ output }: { output: unknown }) {
   const router = useRouter();
   if (!output || typeof output !== "object") return null;
@@ -31,9 +33,13 @@ export function GoalsCard({ output }: { output: unknown }) {
 
   if (data.goals.length === 0) return null;
 
+  const displayedGoals = data.goals.slice(0, MAX_INLINE_ITEMS);
+  const hasMore = data.goals.length > MAX_INLINE_ITEMS;
+
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-      {data.goals.map((goal) => (
+    <div className="space-y-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        {displayedGoals.map((goal) => (
         <Card
           key={goal.id}
           className="cursor-pointer transition-colors hover:bg-muted/50"
@@ -69,6 +75,15 @@ export function GoalsCard({ output }: { output: unknown }) {
           </CardContent>
         </Card>
       ))}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => router.push("/goals")}
+          className="w-full py-2 px-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
+        >
+          View all {data.goals.length} goals
+        </button>
+      )}
     </div>
   );
 }

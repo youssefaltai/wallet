@@ -36,9 +36,9 @@ export function EditBudgetDialog({
 
   useEffect(() => {
     if (open && budget) {
-      setStartDate(budget.startDate);
-      setEndDate(budget.endDate);
       getBudgetDateRangesAction(budget.categoryAccountId, budget.id).then((result) => {
+        setStartDate(budget.startDate);
+        setEndDate(budget.endDate);
         if (result.data) setExistingRanges(result.data);
       });
     }

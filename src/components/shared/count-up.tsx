@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface CountUpProps {
   value: number;
@@ -18,7 +18,9 @@ export function CountUp({
   const [display, setDisplay] = useState(format(0));
   const ref = useRef<number | null>(null);
   const formatRef = useRef(format);
-  formatRef.current = format;
+  useLayoutEffect(() => {
+    formatRef.current = format;
+  });
 
   useEffect(() => {
     const start = performance.now();

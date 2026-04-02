@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 
@@ -26,35 +26,33 @@ export function ChatInterface({
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const convIdRef = useRef(conversationId);
 
-  useEffect(() => {
-    convIdRef.current = conversationId;
-  }, [conversationId]);
+  // activeConvId tracks the live conversation ID. It starts as the prop value
+  // and may be updated by the server after the first message in a new chat.
+  const [activeConvId, setActiveConvId] = useState(conversationId);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        body: () => ({ conversationId: convIdRef.current }),
-        fetch: async (url, init) => {
-          const response = await globalThis.fetch(url, init);
-          const newId = response.headers.get("X-Conversation-Id");
-          if (newId && !convIdRef.current) {
-            convIdRef.current = newId;
-          }
-          return response;
-        },
-      }),
-    [],
-  );
+  // Recreate the transport whenever the active conversation ID changes, so the
+  // body closure always captures the right ID. This is the React-idiomatic way
+  // to pass changing values into a transport without refs.
+  const transport = new DefaultChatTransport({
+    body: () => ({ conversationId: activeConvId }),
+    fetch: async (url, init) => {
+      const response = await globalThis.fetch(url, init);
+      const newId = response.headers.get("X-Conversation-Id");
+      if (newId && newId !== activeConvId) {
+        setActiveConvId(newId);
+      }
+      return response;
+    },
+  });
 
   const { messages, setMessages, sendMessage, status, stop, error } = useChat({
     ...(conversationId != null ? { id: conversationId } : {}),
     transport,
     onFinish: () => {
       scrollToBottom();
-      if (convIdRef.current && !conversationId) {
-        window.history.replaceState(null, "", `/chat/${convIdRef.current}`);
+      if (activeConvId && !conversationId) {
+        window.history.replaceState(null, "", `/chat/${activeConvId}`);
       }
       mutate("/api/conversations");
     },
@@ -77,6 +75,16 @@ export function ChatInterface({
   }, [conversationId, setMessages]);
 
   const isLoading = status === "submitted" || status === "streaming";
+
+  // Check if the last assistant message has any visible content
+  const lastAssistantMessage = messages.findLast(
+    (m) => m.role === "assistant"
+  );
+  const hasVisibleContent =
+    lastAssistantMessage?.parts && lastAssistantMessage.parts.length > 0;
+
+  // Show thinking indicator only while loading and no visible content yet
+  const showThinking = isLoading && !hasVisibleContent;
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -147,8 +155,8 @@ export function ChatInterface({
               userImage={userImage}
             />
           ))}
-          {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-            <div className="flex gap-3">
+          {showThinking && (
+            <div className="flex gap-3 animate-fade-in-left">
               <UserAvatar
                 name="Wallet"
                 fallbackClassName="bg-primary/10 text-primary"

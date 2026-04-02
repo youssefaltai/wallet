@@ -5,7 +5,7 @@
  * verification) and obtain authenticated Playwright browser contexts.
  */
 
-import { test as base, expect, type Page, type BrowserContext } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
