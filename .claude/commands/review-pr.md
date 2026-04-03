@@ -1,4 +1,4 @@
-Review the current branch's pull request, or a specific PR if a number is provided as $ARGUMENTS.
+Review the current branch's pull request, or a specific PR if a number is provided as $ARGUMENTS. After analysis, **submit a real GitHub review** — approve, request changes, or comment — using `gh pr review`.
 
 ## 1. Identify the PR
 
@@ -57,34 +57,70 @@ Work through every applicable check. Read the actual diff lines — don't guess.
 - No `as unknown as SomeType` double-casts?
 - No `.env*` file changes?
 - If behavior changed: does it need a new E2E test in `tests/`?
+- Existing tests still pass? If tests were touched, are the assertions correct?
 
-## 4. Output a structured review
+## 4. Determine verdict
 
-```
-## PR Review: [title] (#number)
+| Condition | Verdict |
+|-----------|---------|
+| Any CRITICAL or HIGH issue | REQUEST CHANGES |
+| Only MEDIUM / LOW issues | COMMENT |
+| No issues | APPROVE |
 
-### Summary
-[2-3 sentences on what this change does and why]
+## 5. Submit the GitHub review
 
-### Issues Found
+Compose a single review body covering all findings, then submit it with the appropriate `gh pr review` subcommand. Use the PR number from step 1.
 
-#### CRITICAL (block merge)
-- [issue description] — [file:line]
+**If APPROVE:**
+```bash
+gh pr review {number} --approve --body "$(cat <<'EOF'
+[2-3 sentence summary of what was reviewed and why it's clean]
 
-#### HIGH (should fix before merge)
+**Checked:**
+- [domain]: [what was verified]
 - ...
 
-#### MEDIUM (consider addressing)
-- ...
-
-#### LOW (optional)
-- ...
-
-### Clean areas
-- [list what checked out fine]
-
-### Verdict: APPROVE / REQUEST CHANGES / COMMENT
-[One sentence rationale]
+No issues found — ready to merge.
+EOF
+)"
 ```
 
-If no issues found: state "No issues found — ready to merge." explicitly.
+**If REQUEST CHANGES:**
+```bash
+gh pr review {number} --request-changes --body "$(cat <<'EOF'
+[2-3 sentence summary]
+
+**Issues that must be fixed before merging:**
+
+### [Issue 1 title] — [file:line]
+[Description, why it matters, what the fix looks like]
+
+### [Issue 2 title] — [file:line]
+...
+
+**Clean areas:** [list what was fine]
+EOF
+)"
+```
+
+**If COMMENT (MEDIUM/LOW only):**
+```bash
+gh pr review {number} --comment --body "$(cat <<'EOF'
+[2-3 sentence summary]
+
+**Findings (non-blocking):**
+
+### [Issue 1 title] — [file:line]
+[Description and suggested improvement]
+
+**Clean areas:** [list what was fine]
+EOF
+)"
+```
+
+## 6. Report the outcome
+
+After submitting, output:
+- The verdict and a one-line rationale
+- The GitHub review URL (from `gh pr view {number} --json reviews`)
+- What needs to happen next (e.g. "address the 2 issues above and re-request review")
