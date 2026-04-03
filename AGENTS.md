@@ -27,8 +27,8 @@ Invoke: "plan the recurring transactions feature" or `/feature <description>`.
 |---------|-------------|
 | `/feature <desc>` | Plan + implement a feature: Linear issue → branch → code → PR |
 | `/fix <issue>` | Fix a bug or audit issue: Linear issue → branch → fix → PR |
-| `/ship` | Validate → push branch → open PR → set Linear to "In Review" |
-| `/review-pr [number]` | Review current branch's PR (or PR #N) against project quality standards |
+| `/ship` | Validate → push branch → open PR → **self-review** → set Linear to "In Review" |
+| `/review-pr [number]` | Review PR with domain checks, then submit `gh pr review` (approve / request-changes / comment) |
 | `/migrate <desc>` | Full DB migration workflow: schema → generate → review → apply |
 | `/check` | Run all quality gates + financial invariant spot-check |
 | `/evolve` | Self-improvement: audit .claude/ setup, fix gaps, update rules |
@@ -43,9 +43,10 @@ Every change goes through a branch and a PR — never directly to `main`.
 |------|-------------|
 | Start work | `git checkout -b {type}/WALLET-XX-description` |
 | Implement | Commits on the branch with conventional messages |
-| `/ship` | Validates → pushes → opens PR → Linear → "In Review" |
+| `/ship` | Validates → pushes → opens PR → self-reviews → Linear → "In Review" |
+| Self-review | `/review-pr` runs automatically; submits `gh pr review` approve/request-changes/comment |
 | CI | TypeScript + lint run automatically on every PR |
-| Merge | Squash merge via GitHub — one commit per PR on main |
+| Merge | Squash merge via GitHub — one commit per PR on main (no open "request changes" reviews) |
 | Done | Linear issue → Done |
 
 **Branch format:** `feat/WALLET-42-recurring-transactions`, `fix/WALLET-5-overdraft`

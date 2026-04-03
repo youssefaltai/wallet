@@ -71,6 +71,14 @@ EOF
 
 Call `save_issue` to set the Linear issue state to "In Review".
 
-## 7. Output
+## 7. Self-review
 
-Return the PR URL so the user can open it immediately.
+Immediately run `/review-pr` on the PR that was just opened.
+
+This is not optional — every PR Claude opens must have a review submitted before the human sees it. The self-review catches regressions, stale tests, and scope creep that quality gates don't catch.
+
+If the self-review finds CRITICAL or HIGH issues: request changes on the PR, fix them on the branch, push, and re-review.
+
+## 8. Output
+
+Return the PR URL and the review verdict so the user can see both at once.

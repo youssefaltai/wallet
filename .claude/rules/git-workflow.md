@@ -91,6 +91,24 @@ Delete the branch after merge.
 - `/fix` and `/feature` set the issue to "Done" after the PR merges
 - Issues move: Backlog → In Progress (when branch created) → In Review (when PR opened) → Done (when merged)
 
+## PR Review Process
+
+Every PR must receive a formal GitHub review before it can be merged. "Formal" means an actual `gh pr review` submission — not just a text summary in the conversation.
+
+**Verdict rules:**
+
+| Finding | Review action |
+|---------|--------------|
+| Any CRITICAL or HIGH issue | `gh pr review {number} --request-changes --body "..."` |
+| Only MEDIUM or LOW issues | `gh pr review {number} --comment --body "..."` |
+| No issues found | `gh pr review {number} --approve --body "..."` |
+
+**Self-review on `/ship`:** Every time `/ship` opens a PR, it immediately runs `/review-pr` on that PR. Claude reviews its own work before the human sees it. If the self-review finds CRITICAL/HIGH issues, fix them on the branch, push, and re-review before surfacing the PR URL to the user.
+
+**Re-review after changes:** When a PR author addresses requested changes, run `/review-pr` again to confirm resolution and update the verdict.
+
+**Never merge a PR with an open "request changes" review** — even if CI is green. Resolve or dismiss the review first.
+
 ## What NOT to Do
 
 - Don't `git push --force` to main
@@ -98,3 +116,4 @@ Delete the branch after merge.
 - Don't open a PR without filling in the template
 - Don't leave branches open after merge
 - Don't commit directly to main, ever
+- Don't leave a review as just conversation text — always submit it to GitHub with `gh pr review`
