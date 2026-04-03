@@ -29,19 +29,39 @@ git push -u origin HEAD
 
 ## 5. Open the PR
 
-Use `gh pr create` with a fully filled-out description. Do NOT use `--fill` — write the description properly:
+Use `gh pr create` with all metadata filled out. Do NOT use `--fill` — write everything properly.
 
-- **Title**: `{conventional-commit-type}: {description} [WALLET-XX]`
-- **Body**: fill the PR template sections:
-  - Summary: 2-4 sentences describing what changed and why
-  - Linear issue link: `https://linear.app/walletai/issue/WALLET-XX`
-  - Type of change: check the right box
-  - How to test: concrete steps
-  - Financial invariants section: include only if services/ledger/tools were touched
-  - Checklist: all boxes checked (you verified them in step 2)
+**Title**: `{conventional-commit-type}: {description} [WALLET-XX]`
+
+**Labels** — apply all that fit:
+| Label | When |
+|-------|------|
+| `bug` | Fix for broken behaviour |
+| `enhancement` | New user-facing capability |
+| `security` | Auth, authz, secrets, injection |
+| `auth` | Authentication or session changes |
+| `ai` | AI tools, system prompt, LLM integration |
+| `database` | Schema, migrations, queries, indexes |
+| `ui` | Components, layouts, CSS, accessibility |
+| `performance` | Query optimisation, render speed, bundle |
+| `tech-debt` | Refactors, audit fixes, test coverage |
+| `documentation` | Docs, comments, CLAUDE.md |
+
+**Body** — fill every section:
+- Summary: 2-4 sentences on what changed and why
+- Linear issue link: `https://linear.app/walletai/issue/WALLET-XX`
+- Type of change: check the right box
+- How to test: concrete steps a reviewer can follow
+- Financial invariants: include only if services/ledger/tools were touched
+- Checklist: all boxes checked
 
 ```bash
-gh pr create --title "..." --body "$(cat <<'EOF'
+gh pr create \
+  --title "..." \
+  --assignee youssefaltai \
+  --reviewer youssefaltai \
+  --label "bug,security" \
+  --body "$(cat <<'EOF'
 ...
 EOF
 )"

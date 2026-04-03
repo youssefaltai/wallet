@@ -28,6 +28,7 @@ Invoke: "plan the recurring transactions feature" or `/feature <description>`.
 | `/feature <desc>` | Plan + implement a feature: Linear issue → branch → code → PR |
 | `/fix <issue>` | Fix a bug or audit issue: Linear issue → branch → fix → PR |
 | `/ship` | Validate → push branch → open PR → set Linear to "In Review" |
+| `/review-pr [number]` | Review current branch's PR (or PR #N) against project quality standards |
 | `/migrate <desc>` | Full DB migration workflow: schema → generate → review → apply |
 | `/check` | Run all quality gates + financial invariant spot-check |
 | `/evolve` | Self-improvement: audit .claude/ setup, fix gaps, update rules |

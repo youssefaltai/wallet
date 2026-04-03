@@ -22,7 +22,7 @@ These rules apply to every change in services, AI tools, server actions, and API
 
 ## 2. Every journal entry must be zero-sum
 
-The sum of all debit amounts must equal the sum of all credit amounts within a single journal entry. This is enforced at application layer (no DB CHECK constraint yet — see M11 in audit-guide).
+The sum of all debit amounts must equal the sum of all credit amounts within a single journal entry. This is enforced at application layer (no DB-level CHECK constraint yet — tracked as a known open issue in `.claude/audit-guide.md`).
 
 Before creating any journal entry with custom lines, verify:
 ```typescript
