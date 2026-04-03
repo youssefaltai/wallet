@@ -36,7 +36,11 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid email or password");
+      if (result.code === "rate_limited") {
+        setError("Too many login attempts. Please wait a few minutes and try again.");
+      } else {
+        setError("Invalid email or password");
+      }
     } else {
       router.push("/");
       router.refresh();
