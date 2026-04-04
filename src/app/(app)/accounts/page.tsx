@@ -8,7 +8,12 @@ import { AnimateIn } from "@/components/shared/animate-in";
 
 export const metadata: Metadata = { title: "Accounts | Wallet" };
 
-export default async function AccountsPage() {
+export default async function AccountsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ date?: string }>;
+}) {
+  const resolvedParams = await searchParams;
   const session = await cachedAuth();
   if (!session?.user?.id) redirect("/login");
 
@@ -39,7 +44,7 @@ export default async function AccountsPage() {
         </div>
       </AnimateIn>
       <AnimateIn delay={50}>
-        <AccountList accounts={accounts} currency={currency} totalFormatted={totalFormatted} />
+        <AccountList accounts={accounts} currency={currency} totalFormatted={totalFormatted} dateParam={resolvedParams?.date ?? null} />
       </AnimateIn>
     </div>
   );
