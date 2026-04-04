@@ -31,20 +31,12 @@ Implement in dependency order to avoid cascading TypeScript errors:
 
 **Read before writing.** Read every file you're about to modify. Understand existing patterns.
 
-**Follow the financial invariants.** These are non-negotiable:
-- All balance changes go through `createJournalEntry` in `ledger.ts`
-- Multi-step writes use `db.transaction()`
-- Money amounts: `toMinorUnits()` on input, `toMajorUnits()` on output
-- Every query scopes to `userId`
-- No cached FX rates on write operations
-
-**Follow the service layer rules.**
-- DB access only in `src/lib/services/` — never in tools, routes, or actions directly
-- `userId` is always the second parameter of service functions
-
-**Follow the UI rules.**
-- `cachedAuth()` in Server Components and actions — never raw `auth()`
-- No DB/service imports in `"use client"` files
+**Follow the rules for each area you touch — read the rule file before writing code there:**
+- `src/lib/services/` or `src/lib/ai/tools/` → read `.claude/rules/financial-invariants.md` and `.claude/rules/services.md`
+- `src/app/api/` → read `.claude/rules/api-routes.md`
+- `src/lib/ai/tools/` or `src/lib/ai/system-prompt.ts` → read `.claude/rules/ai-tools.md`
+- `src/lib/db/` or migrations → read `.claude/rules/migrations.md`
+- `src/components/` or `src/app/(app)/` → read `.claude/rules/ui-components.md`
 
 **Stay in scope.** Only implement what the plan specifies. If something adjacent seems broken, note it — don't fix it.
 
