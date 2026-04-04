@@ -53,7 +53,7 @@ Update `/Users/youssef/wallet/AGENTS.md` to reflect any agents or commands that 
 `.claude/` config changes are the one exception to the no-direct-commits-to-main rule — they configure the agent environment, not the product. Commit directly to main:
 
 ```bash
-git add -f .claude/...
+git add -f .claude/ AGENTS.md CLAUDE.md
 git commit -m "chore(.claude): [brief summary of what evolved]"
 ```
 
