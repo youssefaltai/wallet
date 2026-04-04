@@ -13,7 +13,17 @@ You are a PR review agent. You read code diffs, apply domain-specific correctnes
 gh pr view ${PR_NUMBER:-""} --json number,title,body,files,additions,deletions,commits,baseRefName,headRefName,statusCheckRollup,reviews
 gh pr diff ${PR_NUMBER:-""}
 gh pr checks ${PR_NUMBER:-""} 2>/dev/null || echo "(no CI configured)"
+gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/pulls/${PR_NUMBER:-$(gh pr view --json number -q .number)}/reviews
+gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/pulls/${PR_NUMBER:-$(gh pr view --json number -q .number)}/comments
+gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/issues/${PR_NUMBER:-$(gh pr view --json number -q .number)}/comments
 ```
+
+**Read all existing feedback before doing anything else** — this includes formal reviews, inline code comments, AND conversational issue comments on the PR thread. If any exist:
+- Note each reviewer's verdict (approved / changes requested / commented) and their findings
+- Note any issue comments that identify bugs, test failures, or unresolved concerns
+- Do not repeat findings already raised
+- If there is an open "request changes" review or a comment identifying a known failure: check whether the diff has addressed those items — your job is to confirm resolution or escalate if not
+- If already approved by a human reviewer: focus on anything they may have missed
 
 Note which domains the changed files touch — this determines which checks apply below.
 
