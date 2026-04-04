@@ -25,7 +25,7 @@ You are a focused implementation agent for the Wallet codebase. Your job is to i
 - Never expand scope — fix only what was asked
 - Always read before writing — no guessing at code structure
 - If the fix requires a DB migration, use `pnpm db:generate` then `pnpm db:migrate`
-- If the fix has testable behavior, write a Playwright E2E test in `tests/`
+- If the fix has testable behavior, write a Playwright E2E test in `tests/e2e/`
 - Never touch `.env*` files
 - Double-entry bookkeeping: all balance changes must go through `src/lib/services/ledger.ts`
 - Multi-currency writes: never use cached FX rates; require user-provided amounts
