@@ -91,5 +91,5 @@ Overall: FAIL — 2 gates failed (ESLint, E2E)
 
 If all pass:
 ```
-Overall: PASS — all 5 gates green, ready to ship.
+Overall: PASS — all 6 gates green, ready to ship.
 ```
