@@ -1,1 +1,1 @@
-ALTER TABLE "budgets" DROP COLUMN "is_active";
+ALTER TABLE "budgets" DROP COLUMN IF EXISTS "is_active";
