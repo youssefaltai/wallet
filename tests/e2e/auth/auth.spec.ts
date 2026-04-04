@@ -46,6 +46,7 @@ test.describe("Signup", () => {
 
     try {
       await page.goto("/signup");
+      await page.getByLabel("Name").fill("Duplicate User");
       await page.getByLabel("Email").fill(user.email);
       await page.getByLabel("Password").fill("AnotherPass123!");
       await page.getByRole("button", { name: "Sign up" }).click();
@@ -65,6 +66,7 @@ test.describe("Signup", () => {
 
     try {
       await page.goto("/signup");
+      await page.getByLabel("Name").fill("Unverified User");
       await page.getByLabel("Email").fill(user.email);
       await page.getByLabel("Password").fill(user.password);
       await page.getByRole("button", { name: "Sign up" }).click();
@@ -247,7 +249,7 @@ test.describe("Auth Guards", () => {
 // ── Rate Limiting ────────────────────────────────────────────────────────
 
 test.describe("Rate Limiting", () => {
-  test("login rate limit — 6th attempt fails silently (same error)", async ({
+  test("login rate limit — 6th attempt shows distinct rate-limit error", async ({
     page,
   }) => {
     const user = await createVerifiedUser();
@@ -258,25 +260,28 @@ test.describe("Rate Limiting", () => {
 
       await page.goto("/login");
 
-      // Attempt 6 logins with a wrong password
-      for (let i = 1; i <= 6; i++) {
+      // Attempts 1–5: wrong password within the rate limit — generic error
+      for (let i = 1; i <= 5; i++) {
         await page.getByLabel("Email").fill(user.email);
         await page.getByLabel("Password").fill("WrongPassword!");
         await page.getByRole("button", { name: "Log in" }).click();
 
-        // Every attempt — including the rate-limited 6th — shows the same
-        // generic error message (NextAuth authorize returns null).
         await expect(
           page.getByText("Invalid email or password"),
         ).toBeVisible({ timeout: 10_000 });
 
-        // Clear the form error before next iteration so we can detect
-        // a fresh appearance of the message
-        if (i < 6) {
-          await page.getByLabel("Email").clear();
-          await page.getByLabel("Password").clear();
-        }
+        await page.getByLabel("Email").clear();
+        await page.getByLabel("Password").clear();
       }
+
+      // Attempt 6: rate limit exceeded — must show the distinct rate-limit message
+      await page.getByLabel("Email").fill(user.email);
+      await page.getByLabel("Password").fill("WrongPassword!");
+      await page.getByRole("button", { name: "Log in" }).click();
+
+      await expect(
+        page.getByText("Too many login attempts. Please wait a few minutes and try again."),
+      ).toBeVisible({ timeout: 10_000 });
     } finally {
       await clearRateLimitsByPattern(`%login%${user.email}%`);
       await deleteTestUser(user.id);
