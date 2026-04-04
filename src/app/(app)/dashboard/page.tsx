@@ -217,7 +217,7 @@ export default async function DashboardPage({
                   </Link>
                 </p>
               ) : (
-                <DashboardAccountCards accounts={activeAccounts} baseDelay={320} />
+                <DashboardAccountCards accounts={activeAccounts} baseDelay={320} dateParam={params.date ?? null} />
               )}
             </CardContent>
           </Card>

@@ -7,11 +7,11 @@ import {
   seedTransfer,
 } from "../../fixtures/db-helpers";
 
-// All seeded dates are within March 2026 (the current month) so they appear
-// on the default transactions page, unless a test deliberately uses dates
-// outside that range.
+// All seeded dates are within the current month so they appear on the
+// default transactions page, unless a test deliberately uses dates outside
+// that range.
 
-const THIS_MONTH = "2026-03";
+const THIS_MONTH = new Date().toISOString().slice(0, 7);
 
 /**
  * Helper: navigate to the transactions page and wait for the heading.

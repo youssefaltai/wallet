@@ -34,8 +34,9 @@ async function switchSettingsTab(
   // Click the nav button for the section
   await dialog.getByRole("navigation").getByRole("button", { name: tabLabel }).click();
   // Wait for the content area heading (h2.text-lg inside the scrollable content pane)
+  // Note: the h2 is inside .animate-fade-up inside .overflow-y-auto (not a direct child)
   await expect(
-    dialog.locator(".overflow-y-auto > h2").filter({ hasText: tabLabel }),
+    dialog.locator(".overflow-y-auto h2").filter({ hasText: tabLabel }),
   ).toBeVisible();
 }
 

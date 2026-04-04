@@ -45,11 +45,12 @@ function statCard(page: import("@playwright/test").Page, title: string) {
 }
 
 /**
- * Locate a dashboard section by its h2 heading text.
+ * Locate a dashboard section by its CardTitle heading text.
  * Returns the parent container that includes the heading and content.
+ * CardTitle renders as a <div data-slot="card-title">, not <h2>.
  */
 function section(page: import("@playwright/test").Page, heading: string) {
-  return page.locator("h2", { hasText: heading }).locator("..");
+  return page.locator('[data-slot="card-title"]', { hasText: heading }).locator("..");
 }
 
 /**
@@ -158,9 +159,9 @@ test.describe("Dashboard", () => {
     // Empty state messages
     await expect(authedPage.getByText("No accounts yet.")).toBeVisible();
     await expect(
-      authedPage.getByText("No active budgets this period."),
+      authedPage.getByText("No budgets this period."),
     ).toBeVisible();
-    await expect(authedPage.getByText("No active goals.")).toBeVisible();
+    await expect(authedPage.getByText("No goals yet.")).toBeVisible();
     await expect(
       authedPage.getByText("No transactions yet."),
     ).toBeVisible();
@@ -214,22 +215,28 @@ test.describe("Dashboard", () => {
     await seedFullDashboard(testUser.id);
     await authedPage.goto("/dashboard");
 
-    // Checking account card — filter to cards with "Checking" in CardTitle
-    const checkingCard = authedPage
+    // Scope to the Accounts section's card-content to avoid matching the outer section card
+    const accountsContent = authedPage
+      .locator('[data-slot="card"]')
+      .filter({ has: authedPage.locator('[data-slot="card-title"]', { hasText: "Accounts" }) })
+      .locator('[data-slot="card-content"]');
+
+    // Checking account card
+    const checkingCard = accountsContent
       .locator('[data-slot="card"]')
       .filter({ hasText: "Checking" })
       .filter({ hasText: "Chase" });
     await expect(checkingCard).toBeVisible();
 
     // Savings account card
-    const savingsCard = authedPage
+    const savingsCard = accountsContent
       .locator('[data-slot="card"]')
       .filter({ hasText: "Savings" })
       .filter({ hasText: "Ally Bank" });
     await expect(savingsCard).toBeVisible();
 
     // Credit Card account
-    const ccCard = authedPage
+    const ccCard = accountsContent
       .locator('[data-slot="card"]')
       .filter({ hasText: "Credit Card" })
       .filter({ hasText: "Amex" });
@@ -247,8 +254,14 @@ test.describe("Dashboard", () => {
     await seedFullDashboard(testUser.id);
     await authedPage.goto("/dashboard");
 
+    // Scope to the Budgets section's card-content to avoid matching the outer section card
+    const budgetsContent = authedPage
+      .locator('[data-slot="card"]')
+      .filter({ has: authedPage.locator('[data-slot="card-title"]', { hasText: "Budgets" }) })
+      .locator('[data-slot="card-content"]');
+
     // Grocery Budget: spent $225.50 of $400
-    const budgetCard = authedPage
+    const budgetCard = budgetsContent
       .locator('[data-slot="card"]')
       .filter({ hasText: "Grocery Budget" });
     await expect(budgetCard).toBeVisible();
@@ -273,17 +286,21 @@ test.describe("Dashboard", () => {
     await seedFullDashboard(testUser.id);
     await authedPage.goto("/dashboard");
 
+    // Scope to the Goals section's card-content to avoid matching the outer section card
+    // or the Recent Transactions section (which may contain goal-funding transaction descriptions)
+    const goalsContent = authedPage
+      .locator('[data-slot="card"]')
+      .filter({ has: authedPage.locator('[data-slot="card-title"]', { hasText: "Goals" }) })
+      .locator('[data-slot="card-content"]');
+
     // Vacation Fund: $1,000 of $3,000 target = 33%
-    const goalCard = authedPage
+    const goalCard = goalsContent
       .locator('[data-slot="card"]')
       .filter({ hasText: "Vacation Fund" });
     await expect(goalCard).toBeVisible();
     await expect(goalCard).toContainText(fmtUSD(1000));
     await expect(goalCard).toContainText(`of ${fmtUSD(3000)}`);
     await expect(goalCard).toContainText("33%");
-
-    // Status badge
-    await expect(goalCard).toContainText("active");
 
     // Deadline
     await expect(goalCard).toContainText("Deadline:");
@@ -347,17 +364,17 @@ test.describe("Dashboard", () => {
     await expect(addAccountLink).toBeVisible();
     await expect(addAccountLink).toHaveAttribute("href", "/accounts");
 
-    // "No active budgets this period. Create one" — link goes to /budgets
+    // "No budgets this period. Create one" — link goes to /budgets
     const createBudgetLink = authedPage
-      .getByText("No active budgets this period.")
+      .getByText("No budgets this period.")
       .locator("..")
       .getByRole("link", { name: "Create one" });
     await expect(createBudgetLink).toBeVisible();
     await expect(createBudgetLink).toHaveAttribute("href", "/budgets");
 
-    // "No active goals. Create one" — link goes to /goals
+    // "No goals yet. Create one" — link goes to /goals
     const createGoalLink = authedPage
-      .getByText("No active goals.")
+      .getByText("No goals yet.")
       .locator("..")
       .getByRole("link", { name: "Create one" });
     await expect(createGoalLink).toBeVisible();

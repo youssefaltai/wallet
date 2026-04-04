@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -25,18 +25,18 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
 export function DashboardAccountCards({
   accounts,
   baseDelay,
+  dateParam,
 }: {
   accounts: AccountWithBalance[];
   baseDelay: number;
+  dateParam?: string | null;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   function transactionsUrl(accountId: string) {
     const params = new URLSearchParams();
     params.set("account", accountId);
-    const date = searchParams.get("date");
-    if (date) params.set("date", date);
+    if (dateParam) params.set("date", dateParam);
     return `/transactions?${params.toString()}`;
   }
 

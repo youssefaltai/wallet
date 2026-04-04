@@ -142,6 +142,17 @@ export const test = base.extend<TestFixtures>({
 
   authedPage: async ({ page, testUser }, use) => {
     await loginViaUI(page, testUser.email, testUser.password);
+
+    // Next.js App Router components using useSearchParams (AppSidebar, DateSelector, etc.)
+    // cause a brief double-render during React hydration. Waiting for network idle ensures
+    // hydration is complete before any assertion runs.
+    const originalGoto = page.goto.bind(page);
+    page.goto = async (url: string, options?: Parameters<typeof page.goto>[1]) => {
+      const response = await originalGoto(url, options);
+      await page.waitForLoadState("networkidle");
+      return response;
+    };
+
     await use(page);
   },
 });

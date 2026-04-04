@@ -41,7 +41,7 @@ test.describe("Accounts page", () => {
     await authedPage.goto("/accounts");
 
     // Section heading for assets
-    await expect(authedPage.getByText("Bank & Cash")).toBeVisible();
+    await expect(authedPage.getByRole("heading", { name: "Bank & Cash" })).toBeVisible();
 
     // Scope balance assertions to each account's card to avoid strict mode violations
     const checkingCard = authedPage.locator('[data-slot="card"]').filter({ hasText: "Checking Account" });
@@ -87,7 +87,7 @@ test.describe("Accounts page", () => {
     await authedPage.goto("/accounts");
 
     // Section heading for liabilities
-    await expect(authedPage.getByText("Credit & Loans")).toBeVisible();
+    await expect(authedPage.getByRole("heading", { name: "Credit & Loans" })).toBeVisible();
 
     // Scope to the Visa Card to avoid matching the total balance as well
     const visaCard = authedPage.locator('[data-slot="card"]').filter({ hasText: "Visa Card" });
@@ -308,7 +308,7 @@ test.describe("Accounts page", () => {
     await expect(authedPage.locator("h1", { hasText: "Dashboard" })).toBeVisible();
 
     // Find the "View all" link next to the Accounts heading
-    const viewAllLink = authedPage.locator("h2", { hasText: "Accounts" }).locator("..").getByRole("link", { name: "View all" });
+    const viewAllLink = authedPage.locator('[data-slot="card-header"]').filter({ hasText: "Accounts" }).getByRole("link", { name: "View all" });
     await viewAllLink.click();
 
     // Should navigate to /accounts

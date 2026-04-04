@@ -60,25 +60,27 @@ export async function seedJournalEntry(
     lines: Array<{ accountId: string; amount: bigint }>;
   },
 ) {
-  const [entry] = await db
-    .insert(schema.journalEntries)
-    .values({
-      userId,
-      date: new Date(opts.date),
-      description: opts.description ?? "Seeded transaction",
-      notes: opts.notes,
-    })
-    .returning();
+  return db.transaction(async (tx) => {
+    const [entry] = await tx
+      .insert(schema.journalEntries)
+      .values({
+        userId,
+        date: new Date(opts.date),
+        description: opts.description ?? "Seeded transaction",
+        notes: opts.notes,
+      })
+      .returning();
 
-  for (const line of opts.lines) {
-    await db.insert(schema.journalLines).values({
-      journalEntryId: entry.id,
-      accountId: line.accountId,
-      amount: line.amount,
-    });
-  }
+    for (const line of opts.lines) {
+      await tx.insert(schema.journalLines).values({
+        journalEntryId: entry.id,
+        accountId: line.accountId,
+        amount: line.amount,
+      });
+    }
 
-  return entry;
+    return entry;
+  });
 }
 
 /**
