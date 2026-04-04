@@ -6,6 +6,10 @@
       "Bash(grep:*)",
       "Bash(node:*)",
       "Bash(openssl rand:*)",
+      "Bash(openssl base64:*)",
+      "Bash(openssl dgst:*)",
+      "Bash(GH_TOKEN=*)",
+      "Bash(.claude/hooks/generate-gh-app-token.sh)",
       "Bash(docker ps:*)",
       "Bash(docker exec:*)",
       "Bash(docker compose:*)",
@@ -105,7 +109,13 @@
       "mcp__linear-server__create_document",
       "Bash(git:*)",
       "Bash(gh label:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/Users/youssef/wallet/src/lib/db/migrations/meta/_journal.json'\\)\\); print\\(len\\(d.get\\('entries',[]\\)\\)\\)\")",
+      "Bash(gh --help)",
+      "Bash(gh help:*)",
+      "WebFetch(domain:cli.github.com)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:github.com)"
     ]
   },
   "enableAllProjectMcpServers": true,

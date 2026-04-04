@@ -51,8 +51,16 @@ Label table — apply all that fit:
 | `tech-debt` | Refactors, audit fixes, test coverage |
 | `documentation` | Docs, comments, CLAUDE.md |
 
+**Bot identity:** Before creating the PR, try to get a GitHub App installation token so the PR is attributed to `Claude[bot]` instead of the human user:
+
 ```bash
-gh pr create \
+INSTALL_TOKEN=$("$CLAUDE_PROJECT_DIR/.claude/hooks/generate-gh-app-token.sh" 2>/dev/null || echo "")
+```
+
+If `INSTALL_TOKEN` is non-empty, prefix the `gh pr create` call with `GH_TOKEN="$INSTALL_TOKEN"`. If empty (App not configured or token failed), proceed without it — fall back silently to the user's credentials.
+
+```bash
+GH_TOKEN="$INSTALL_TOKEN" gh pr create \
   --title "{type}: {description} [WALLET-XX]" \
   --assignee youssefaltai \
   --reviewer youssefaltai \
