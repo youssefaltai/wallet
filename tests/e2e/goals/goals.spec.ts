@@ -241,7 +241,8 @@ test.describe("Goals", () => {
     await expect(authedPage.getByText("Dashboard Goal")).toBeVisible();
 
     // Find the "View all" link in the Goals section heading
-    const goalsHeading = authedPage.locator("h2", { hasText: "Goals" });
+    // CardTitle renders as <div data-slot="card-title">, not <h2>
+    const goalsHeading = authedPage.locator('[data-slot="card-title"]', { hasText: "Goals" });
     const goalsSection = goalsHeading.locator("..");
     const viewAllLink = goalsSection.getByRole("link", { name: "View all" });
     await viewAllLink.click();

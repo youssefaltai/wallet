@@ -301,7 +301,7 @@ test.describe("AI Chat", () => {
     authedPage: page,
     testUser,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     // Seed an account for the AI to use
     const checking = await seedAccount(testUser.id, {
@@ -314,8 +314,16 @@ test.describe("AI Chat", () => {
     await page.goto("/chat");
     await sendMessage(page, "I spent $50 on groceries today from my Checking account");
 
-    await waitForToolCompletion(page, "Transaction recorded");
+    // AI will ask for confirmation before recording (by design). Keep confirming
+    // until it records the expense — the AI sometimes asks 2-3 rounds.
     await waitForAssistantResponse(page);
+    for (let i = 0; i < 3; i++) {
+      if (await page.getByText("Expense recorded").isVisible()) break;
+      await sendMessage(page, "Yes, please record this: $50 for groceries from the Checking account today.");
+      await waitForAssistantResponse(page);
+    }
+
+    await waitForToolCompletion(page, "Expense recorded");
 
     // Verify the response acknowledges the transaction
     const responseArea = page.locator(".animate-fade-in-left");
@@ -331,10 +339,18 @@ test.describe("AI Chat", () => {
     test.setTimeout(90_000);
     await page.goto("/chat");
 
-    await sendMessage(page, "Add a checking account at Chase bank called My Chase Checking");
+    // Include all required details to minimise clarifying questions
+    await sendMessage(page, "Add a USD checking account at Chase bank called My Chase Checking, no initial balance");
+
+    // AI may still ask for confirmation. Keep confirming until account is created.
+    await waitForAssistantResponse(page);
+    for (let i = 0; i < 3; i++) {
+      if (await page.getByText("Account created").isVisible()) break;
+      await sendMessage(page, "Yes, USD checking account at Chase called My Chase Checking with no initial balance. Please create it now.");
+      await waitForAssistantResponse(page);
+    }
 
     await waitForToolCompletion(page, "Account created");
-    await waitForAssistantResponse(page);
 
     // Verify by navigating to accounts page
     await page.goto("/accounts");
@@ -345,13 +361,21 @@ test.describe("AI Chat", () => {
   test("AI can create a goal when asked", async ({
     authedPage: page,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await page.goto("/chat");
 
-    await sendMessage(page, "Create a vacation fund goal for $5000");
+    // Include all details to minimise clarifying questions
+    await sendMessage(page, "Create a vacation fund savings goal for $5000 USD with no deadline");
+
+    // AI may ask for confirmation. Keep confirming until goal is created.
+    await waitForAssistantResponse(page);
+    for (let i = 0; i < 3; i++) {
+      if (await page.getByText("Goal created").isVisible()) break;
+      await sendMessage(page, "Yes, USD currency, $5000 target, no deadline. Please create the goal now.");
+      await waitForAssistantResponse(page);
+    }
 
     await waitForToolCompletion(page, "Goal created");
-    await waitForAssistantResponse(page);
 
     // Verify by navigating to goals page
     await page.goto("/goals");
@@ -596,7 +620,7 @@ test.describe("AI Chat", () => {
     authedPage: page,
     testUser,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     // Seed a category
     const category = await seedCategoryAccount(testUser.id, "Rent", "expense");
@@ -618,10 +642,17 @@ test.describe("AI Chat", () => {
     await page.goto("/chat");
     await sendMessage(page, "Delete my April and May Rent budgets");
 
-    // Should call get_budget_status first to find the budgets
+    // AI checks budgets first, then asks for confirmation before deleting.
+    // It may ask multiple times — keep confirming until budgets are deleted.
     await waitForToolCompletion(page, "Checked budgets");
+    await waitForAssistantResponse(page);
 
-    // Then batch delete should complete
+    for (let i = 0; i < 3; i++) {
+      if (await page.getByText("Budgets deleted").isVisible()) break;
+      await sendMessage(page, "Yes, please delete both the April Rent and May Rent budgets.");
+      await waitForAssistantResponse(page);
+    }
+
     await waitForToolCompletion(page, "Budgets deleted");
     await waitForAssistantResponse(page);
 
