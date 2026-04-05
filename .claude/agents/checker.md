@@ -30,8 +30,9 @@ Pass: exit 0. Fail: list all warnings and errors.
 Count `.sql` files in `src/lib/db/migrations/` and compare to `entries` in `src/lib/db/migrations/meta/_journal.json`.
 
 ```bash
-find src/lib/db/migrations -name "*.sql" | wc -l
-python3 -c "import json; d=json.load(open('src/lib/db/migrations/meta/_journal.json')); print(len(d.get('entries',[])))"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+find "$REPO_ROOT/src/lib/db/migrations" -name "*.sql" | wc -l
+python3 -c "import json; d=json.load(open('$REPO_ROOT/src/lib/db/migrations/meta/_journal.json')); print(len(d.get('entries',[])))"
 ```
 
 Pass: counts match. Fail: report SQL count vs journal entry count.
@@ -91,5 +92,5 @@ Overall: FAIL — 2 gates failed (ESLint, E2E)
 
 If all pass:
 ```
-Overall: PASS — all 5 gates green, ready to ship.
+Overall: PASS — all 6 gates green, ready to ship.
 ```

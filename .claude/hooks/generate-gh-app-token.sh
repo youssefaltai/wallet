@@ -26,8 +26,8 @@ set -euo pipefail
 ENV_FILE="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)}/.env.local"
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line; do
-    if [[ "$line" =~ ^CLAUDE_GH_APP_[A-Z_]+=.+ ]]; then
-      export "${line?}"
+    if [[ "$line" =~ ^(CLAUDE_GH_APP_[A-Z_]+)=(.+)$ ]]; then
+      export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
     fi
   done < "$ENV_FILE"
 fi
