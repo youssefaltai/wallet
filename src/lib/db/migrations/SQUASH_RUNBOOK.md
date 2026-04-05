@@ -35,6 +35,8 @@ already exist.
 
 **You must tell Drizzle that `0000_smiling_blob` is already applied.**
 
+> **Deploy order:** Run the database surgery (steps 1–3 below) **before** deploying the new application code. Deploying the code first will cause Drizzle to attempt to apply `0000_smiling_blob` against tables that already exist, resulting in a fatal migration error on startup.
+
 ### Step-by-step
 
 1. Do **not** run `pnpm drizzle-kit migrate` on an existing database without this surgery first.
