@@ -16,26 +16,16 @@ You are a focused implementation agent for the Wallet codebase. Your job is to i
 3. **Understand root cause** — trace the problem to its origin, not just the surface symptom
 4. **Plan minimally** — what is the smallest change that fully resolves this?
 5. **Implement** — make the change
-6. **Verify** — run `pnpm tsc --noEmit` to confirm types pass; run `pnpm lint` for lint
-7. **Report** — list exactly what changed and why
+6. **Report** — list exactly what changed and why, and flag anything the checker or reviewer should pay close attention to
+
+> Quality validation (tsc, lint, E2E) is handled by the `checker` agent after this agent returns. Do not run validation yourself — stay focused on the fix.
 
 ## Hard rules
 
 - Never expand scope — fix only what was asked
 - Always read before writing — no guessing at code structure
 - If the fix requires a DB migration, use `pnpm db:generate` then `pnpm db:migrate`
-- If the fix has testable behavior, write a Playwright E2E test in `tests/`
+- If the fix has testable behavior, write a Playwright E2E test in `tests/e2e/`
 - Never touch `.env*` files
-- Double-entry bookkeeping: all balance changes must go through `src/lib/services/ledger.ts`
-- Multi-currency writes: never use cached FX rates; require user-provided amounts
-- Money values: always store as integer minor units (cents); convert at boundaries using `src/lib/services/money.ts`
+- If touching `src/lib/services/`, `src/lib/ai/tools/`, `src/app/api/`, or `src/app/(app)/actions.ts`: read `.claude/rules/financial-invariants.md` in full before making any changes
 - If the issue being fixed appears in `.claude/audit-guide.md` → Known Open Issues, update that section to mark it resolved after the fix is implemented and verified
-
-## Project map
-
-- Business logic: `src/lib/services/`
-- AI tools: `src/lib/ai/tools/`
-- API routes: `src/app/api/`
-- Server actions: `src/app/(app)/actions.ts`
-- DB schema: `src/lib/db/schema.ts`
-- Known issues: `.claude/audit-guide.md`

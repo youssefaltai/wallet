@@ -1,56 +1,66 @@
 Plan and implement a new feature: $ARGUMENTS
 
-## Phase 1: Plan
+## Phase 1: Plan + Linear (parallel)
 
-Invoke the planner agent:
-- Retention value of this feature?
-- Appetite (1 day / 1 week / 2 weeks)?
-- What files change?
-- What are the risks and rabbit holes?
-- What does "done" look like?
+Dispatch these two in **parallel**:
 
-Show the plan and **wait for confirmation** before proceeding.
+**A. Dispatch `planner` agent** with the feature description.
+Receives: structured plan with appetite, approach, files changed, migration required, rabbit holes, definition of done.
 
-## Phase 2: Linear issue
+**B. Linear lookup (orchestrator):** Call `list_teams`, `list_projects`, `list_issue_statuses`, `list_issue_labels`, `list_issues` to prepare for issue creation.
 
-Create the issue before writing any code:
+Wait for both to complete. Present the plan to the user and **wait for confirmation** before proceeding.
 
-1. `list_teams` + `list_projects` → get Wallet project ID
-2. `list_issue_statuses` → get "In Progress" state ID
-3. `list_issue_labels` → find `Feature` label ID
-4. `save_issue`:
-   - Title: concise (≤70 chars)
-   - Description: plan summary — appetite, files, done criteria
+## Phase 2: Linear issue + branch (orchestrator)
+
+After confirmation:
+
+1. Call `save_issue` with:
+   - Title: ≤70 chars
+   - Description: plan summary (appetite, files, done criteria)
    - Priority: Medium (High if retention-critical)
-   - Label: Feature
+   - Label: `feature`
    - State: In Progress
-5. **Note the identifier** — e.g. `WALLET-42`
+   - Note the **WALLET-XX** identifier
 
-## Phase 3: Branch
+2. Create the branch:
+   ```bash
+   git checkout main && git pull
+   git checkout -b feat/WALLET-{number}-{short-description}
+   ```
 
-```bash
-git checkout main && git pull
-git checkout -b feat/WALLET-{number}-{short-description}
-```
+## Phase 3: Migration (if required)
 
-## Phase 4: Implement
+If the plan indicates a DB migration is needed:
 
-1. If DB migration needed: run `/migrate <description>`
-2. Implement in dependency order: schema → services → AI tools / API routes → UI → tests
-3. After each file: wait for TypeScript hook — fix errors before moving on
-4. Commit incrementally with conventional commit messages as you go
+Dispatch the **`migrator`** agent with the schema change description from the plan. Wait for it to complete before dispatching the implementer — the implementer depends on the schema being in place.
 
-## Phase 5: Test
+## Phase 4: Implementation — dispatch `implementer` agent
 
-Write E2E tests:
-- Happy path
-- Auth check (unauthenticated request rejected)
-- Error path (invalid input handled gracefully)
+Dispatch the **`implementer`** agent with:
+- The full plan from phase 1
+- The branch name
+- The WALLET-XX identifier
+- Whether migration was already applied (yes/no)
 
-Run: `pnpm test:e2e -- --grep "<feature name>"`
+## Phase 5: Validation — dispatch `checker` agent
+
+Dispatch the **`checker`** agent.
+
+If any gate fails: return failures to the user and wait for resolution before proceeding.
 
 ## Phase 6: Ship
 
-Run `/ship` — it validates, pushes the branch, opens the PR, and sets Linear to "In Review".
+Dispatch the **`shipper`** agent with branch name, WALLET-XX, and change summary.
+Receive: PR number and URL.
 
-After the PR merges, set the Linear issue to Done via `save_issue`.
+Then call `save_issue` to set Linear state to **"In Review"**.
+
+Then dispatch the **`reviewer`** agent with the PR number.
+
+## Phase 7: Return
+
+Output:
+- PR URL
+- Review verdict
+- What needs to happen for the PR to merge (if any review issues)

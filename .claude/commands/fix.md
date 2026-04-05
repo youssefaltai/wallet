@@ -1,40 +1,46 @@
 Fix the following issue: $ARGUMENTS
 
-## 1. Find or create the Linear issue
+## Step 1: Linear (orchestrator)
 
-- Search Linear via `list_issues` for the issue by keyword or WALLET-ID
-- If found: call `save_issue` to set state to "In Progress"
-- If not found: create it with appropriate title, priority, and labels, then set to "In Progress"
-- **Note the WALLET-XX identifier**
+Search Linear for the issue by keyword or WALLET-ID (`list_issues`):
+- If found: call `save_issue` to set state to **"In Progress"**
+- If not found: create it (`save_issue`) with appropriate title, priority, and labels, then set to In Progress
+- Note the **WALLET-XX** identifier
 
-## 2. Branch
+## Step 2: Branch (orchestrator)
 
 ```bash
 git checkout main && git pull
 git checkout -b fix/WALLET-{number}-{short-description}
 ```
 
-## 3. Understand before touching
+## Step 3: Fix — dispatch `fixer` agent
 
-- Read every file mentioned in the issue
-- Understand the root cause — not just the symptom
-- Plan the smallest change that fully resolves it (no scope creep)
+Dispatch the **`fixer`** agent with:
+- The issue description (title + full details from Linear)
+- The WALLET-XX identifier
 
-## 4. Implement
+The fixer reads the code, traces the root cause, and implements the minimal fix.
 
-Make the fix. After each file edit, the TypeScript hook fires automatically — fix any errors before continuing.
+## Step 4: Validate — dispatch `checker` agent
 
-## 5. Verify
+Dispatch the **`checker`** agent.
 
-```bash
-pnpm tsc --noEmit   # zero errors
-pnpm lint           # zero errors
-```
+If any gate fails: return failures to the user and wait for resolution before proceeding.
 
-If the fix has testable behaviour: add or update an E2E test in `tests/`.
+## Step 5: Ship
 
-## 6. Ship
+Dispatch in sequence:
 
-Run `/ship` — validates, pushes the branch, opens the PR with a description of what was broken and how it's fixed, sets Linear to "In Review".
+1. **`shipper`** agent — push branch + open PR. Receive PR number and URL.
+2. Call `save_issue` to set Linear state to **"In Review"**.
+3. **`reviewer`** agent — review the PR and submit GitHub review.
 
-After the PR merges: call `save_issue` to set the Linear issue to Done.
+## Step 6: Return
+
+Output:
+- PR URL
+- Review verdict
+- Next actions (e.g. "update the E2E test on line 271 and push")
+
+After the PR merges: call `save_issue` to set the Linear issue to **Done**.

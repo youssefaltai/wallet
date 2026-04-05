@@ -27,13 +27,13 @@ export async function doSomething(
 
 ## Rules
 
+> **Financial invariants** (ledger, zero-sum, FX rates, overdraft prevention, append-only entries) are defined in `.claude/rules/financial-invariants.md`. Both rule files are loaded together when editing services — consult that file for the full set.
+
 **1. userId is always the second parameter.** Every function that touches user data takes `userId` as its second positional argument. This makes it visually obvious when a function is missing auth scoping.
 
 **2. Validate ownership before operating.** When a function operates on a resource (account, goal, budget), fetch it first and verify `resource.userId === userId`. Don't rely on the caller to have done this.
 
-**3. All balance changes go through `createJournalEntry` in `ledger.ts`.** Never update account balances directly. This is the most important rule in the codebase.
-
-**4. Transactions for multi-step operations.** Any operation that writes to multiple tables must use `db.transaction()`. If one step fails, all steps roll back.
+**3. Transactions for multi-step operations.** Any operation that writes to multiple tables must use `db.transaction()`. If one step fails, all steps roll back.
 
 ```typescript
 await db.transaction(async (tx) => {
@@ -42,13 +42,11 @@ await db.transaction(async (tx) => {
 })
 ```
 
-**5. Return domain objects, not raw DB rows.** Convert amounts with `toMajorUnits()` before returning. Services should return values in the same units they'd display to a user.
+**4. Return domain objects, not raw DB rows.** Convert amounts with `toMajorUnits()` before returning. Services should return values in the same units they'd display to a user.
 
-**6. Soft-delete on financial records.** Journal entries use `deletedAt`. Never hard-delete a journal entry. Use `isNull(journalEntries.deletedAt)` in all queries that list entries.
+**5. Soft-delete on financial records.** Journal entries use `deletedAt`. Never hard-delete a journal entry. Use `isNull(journalEntries.deletedAt)` in all queries that list entries.
 
-**7. No business logic in `ledger.ts`.** `ledger.ts` is a pure engine — it creates entries and computes balances. The logic of WHAT to debit and credit belongs in the calling service (accounts.ts, goals.ts, transactions.ts, etc.).
-
-**8. Concurrent writes to the same account balance (unresolved — tracked in Linear).** The `adjustAccountBalance` pattern is vulnerable to TOCTOU races. Until SELECT FOR UPDATE is implemented, avoid creating new patterns that SELECT a balance and then write based on it in separate queries.
+**6. No business logic in `ledger.ts`.** `ledger.ts` is a pure engine — it creates entries and computes balances. The logic of WHAT to debit and credit belongs in the calling service (accounts.ts, goals.ts, transactions.ts, etc.).
 
 ## Error Handling
 

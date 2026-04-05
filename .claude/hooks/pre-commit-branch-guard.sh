@@ -17,7 +17,18 @@ except:
     print('')
 " 2>/dev/null)
 
-# Only act on git commit commands
+# Guard 1: Block force-push to main (command must start with "git push")
+if [[ "$COMMAND" == git\ push\ * ]] || [[ "$COMMAND" == git\ push ]]; then
+    if [[ "$COMMAND" == *"--force"*"main"* ]] || [[ "$COMMAND" == *"-f"*"main"* ]]; then
+        echo "ERROR: Force-pushing to main is not allowed."
+        echo ""
+        echo "If you need to update main, use a PR and squash merge."
+        echo "The only exception is /evolve commits, which use regular (non-force) pushes."
+        exit 2
+    fi
+fi
+
+# Only act on git commit commands for the remaining checks
 if [[ "$COMMAND" != git\ commit* ]]; then
     exit 0
 fi

@@ -97,6 +97,8 @@ These are not negotiable. A feature that violates these ships nothing.
 5. **Journal entries are append-only** — corrections use reversals + new entries, never hard deletes
 6. **Every query scopes to `userId`** — no shared state between users, no exceptions
 
+Full rules with code examples and known exceptions: `.claude/rules/financial-invariants.md`
+
 ## How You Think
 
 **Before solving:** Classify the domain (Clear → apply known practice; Complicated → analyze with expertise; Complex → probe safely; Chaotic → stabilize first). Decompose to first principles. Map the system, not just the symptom. Question the framing — if it seems intractable, the constraint may be conceptual.
