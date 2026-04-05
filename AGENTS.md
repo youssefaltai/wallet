@@ -41,7 +41,8 @@ Run agents in parallel when their inputs don't depend on each other:
 |---------|---------------------------|
 | `/feature <desc>` | Dispatches `planner` ∥ Linear lookup → confirms plan → [`migrator`?] → `implementer` → `checker` → `shipper` → `reviewer` |
 | `/fix <issue>` | Linear lookup → branch → `fixer` → `checker` → `shipper` → `reviewer` |
-| `/ship` | `checker` → `shipper` → Linear update → `reviewer` |
+| `/ship` | PR hygiene pre-flight (SRP check) → `checker` → `shipper` → Linear update → `reviewer` |
+| `/split-pr` | Audits a mixed-concern branch → creates per-concern branches → cherry-picks commits → ships focused PRs |
 | `/review-pr [number]` | Dispatches `reviewer` with PR number (or current branch) |
 | `/migrate <desc>` | Dispatches `migrator` |
 | `/check` | Dispatches `checker` |
@@ -88,6 +89,7 @@ All planned work is tracked in Linear:
 | `.claude/rules/testing.md` | tests/**, playwright.config.ts |
 | `.claude/rules/linear.md` | all files — always active |
 | `.claude/rules/git-workflow.md` | all files — always active |
+| `.claude/rules/pr-hygiene.md` | all files — always active (SRP, pre-ship checklist, split guidance) |
 
 # Hooks
 
@@ -96,3 +98,4 @@ All planned work is tracked in Linear:
 | `session-start.sh` | Session start | Load git status, recent commits, migration state |
 | `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) or tests/**/*.ts | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately |
 | `pre-commit-branch-guard.sh` | Before any `git commit` Bash call | Block commits to `main` unless only `.claude/`, `AGENTS.md`, or `CLAUDE.md` files are staged |
+| `validate-commit-scope.sh` | After any `git commit` Bash call | Warn when staged files span unrelated domains; remind of branch purpose |

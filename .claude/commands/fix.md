@@ -14,6 +14,8 @@ git checkout main && git pull
 git checkout -b fix/WALLET-{number}-{short-description}
 ```
 
+**Scope lock:** this branch exists to fix exactly the problem described in the Linear issue. Any other bug or improvement discovered during the fix must be filed as a new Linear issue and handled on a separate branch. Never add unrelated changes to a fix branch.
+
 ## Step 3: Fix — dispatch `fixer` agent
 
 Dispatch the **`fixer`** agent with:
