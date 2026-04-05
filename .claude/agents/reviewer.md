@@ -36,6 +36,13 @@ Work through every applicable check. Read the actual diff lines — never guess.
 - All inputs validated (UUID format, type, length)?
 - Correct HTTP status codes?
 
+**`src/app/(app)/actions.ts` — Server Action correctness:**
+- Every action calls `cachedAuth()` (not raw `auth()`) at the top?
+- No direct DB queries — all data access through `src/lib/services/`?
+- Financial actions (account/transaction/goal/budget mutations) follow financial-invariants.md?
+- `revalidatePath` called after mutations for the correct pages?
+- Actions return typed error shapes instead of throwing for validation failures?
+
 **`src/lib/auth.ts` or `src/app/(auth)/` — Auth correctness:**
 - Auth errors use typed classes (`CredentialsSignin` subclasses), not raw `null` returns?
 - Rate limiting present on login/signup?

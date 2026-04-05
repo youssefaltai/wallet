@@ -162,12 +162,17 @@ src/
     goals.ts
     budgets.ts
     fx-rates.ts
+    conversations.ts
+    memories.ts
+    categories.ts
+    users.ts
+    email.ts
   components/
     chat/tool-cards/    # UI cards rendered per AI tool result
     shared/             # Reusable form components
 ```
 
-See `.claude/rules/` for domain-specific rules loaded contextually.
+See `.claude/rules/` for domain-specific rules loaded contextually. Key rules: `financial-invariants.md` (money/ledger), `server-actions.md` (actions.ts pattern), `services.md` (service layer), `api-routes.md`, `migrations.md`, `ui-components.md`, `testing.md`.
 See `.claude/agents/` for available subagents.
 See `.claude/commands/` for workflow commands.
 

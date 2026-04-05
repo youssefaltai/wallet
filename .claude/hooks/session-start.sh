@@ -45,7 +45,7 @@ Database migrations: $MIGRATION_STATUS
 Open PRs:
 $(gh pr list --limit 5 2>/dev/null || echo "  (no GitHub remote configured)")
 
-Linear: use \`list_issues\` filtered by 'In Progress' state to see active work before starting.
+Linear: before starting new work, call \`list_issues\` filtered to 'In Progress' state to see active branches, and 'In Review' to see open PRs needing attention.
 ==============================="
 
 # Output as JSON for Claude to receive as additionalContext

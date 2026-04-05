@@ -53,6 +53,19 @@ grep -rn "\.delete(.*journalLines.*\|.*journalEntries.*)" src/ --include="*.ts"
 
 Pass: no matches outside ledger.ts. Fail: list each violation with file:line.
 
+## Gate 4b: Service layer isolation check
+
+Grep for direct DB access in files that should only call services:
+
+```bash
+# Direct DB queries in API routes, server actions, components, hooks, and AI tools
+grep -rn "db\.\(select\|insert\|update\|delete\|query\)" \
+  src/app/api/ src/app/\(app\)/actions.ts src/components/ src/hooks/ src/lib/ai/tools/ \
+  --include="*.ts" --include="*.tsx" 2>/dev/null
+```
+
+Pass: no matches. Fail: list each violation — direct DB access must go through `src/lib/services/`.
+
 ## Gate 5: E2E tests
 
 Only run if `tests/` directory exists.

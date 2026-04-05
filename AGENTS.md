@@ -84,6 +84,7 @@ All planned work is tracked in Linear:
 | `.claude/rules/api-routes.md` | src/app/api/ |
 | `.claude/rules/ai-tools.md` | src/lib/ai/tools/, system-prompt.ts |
 | `.claude/rules/services.md` | src/lib/services/ |
+| `.claude/rules/server-actions.md` | src/app/(app)/actions.ts |
 | `.claude/rules/migrations.md` | src/lib/db/ |
 | `.claude/rules/ui-components.md` | src/app/(app)/**, src/components/**, src/hooks/** |
 | `.claude/rules/testing.md` | tests/**, playwright.config.ts |
@@ -95,7 +96,8 @@ All planned work is tracked in Linear:
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `session-start.sh` | Session start | Load git status, recent commits, migration state |
-| `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) or tests/**/*.ts | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately; if `schema.ts` was edited, also print a migration reminder with current SQL/journal counts |
-| `pre-commit-branch-guard.sh` | Before any `git commit` Bash call | Block commits to `main` unless only `.claude/`, `AGENTS.md`, or `CLAUDE.md` files are staged |
-| `validate-commit-scope.sh` | After any `git commit` Bash call | Warn when staged files span unrelated domains; remind of branch purpose |
+| `session-start.sh` | Session start | Load git status, recent commits, migration state, open PRs |
+| `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) or tests/**/*.ts | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately; if `schema.ts` was edited, print migration reminder |
+| `post-edit-db-guard.sh` | After Edit/Write on api routes, actions.ts, components, hooks, ai/tools | Warn when direct `db.select/insert/update/delete` calls are detected outside the service layer |
+| `pre-commit-branch-guard.sh` | Before any `git commit` or `git push` Bash call | Block commits to `main` (unless .claude/ only); block force-push to main |
+| `validate-commit-scope.sh` | Before any `git commit` Bash call | Warn when staged files span unrelated domains; remind of branch purpose (runs pre-commit so Claude sees warnings before the commit lands) |

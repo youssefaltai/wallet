@@ -27,5 +27,6 @@ You are a focused implementation agent for the Wallet codebase. Your job is to i
 - If the fix requires a DB migration, use `pnpm db:generate` then `pnpm db:migrate`
 - If the fix has testable behavior, write a Playwright E2E test in `tests/e2e/`
 - Never touch `.env*` files
-- If touching `src/lib/services/`, `src/lib/ai/tools/`, `src/app/api/`, or `src/app/(app)/actions.ts`: read `.claude/rules/financial-invariants.md` in full before making any changes
+- If touching `src/lib/services/`, `src/lib/ai/tools/`, or `src/app/api/`: read `.claude/rules/financial-invariants.md` in full before making any changes
+- If touching `src/app/(app)/actions.ts`: read `.claude/rules/server-actions.md` and `.claude/rules/financial-invariants.md` in full before making any changes
 - If the issue being fixed appears in `.claude/audit-guide.md` → Known Open Issues, update that section to mark it resolved after the fix is implemented and verified
