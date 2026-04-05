@@ -15,8 +15,8 @@ except:
     print('')
 " 2>/dev/null)
 
-# Only run for TypeScript source files; skip .d.ts and non-src paths
-if [[ "$FILE" =~ /src/.*\.(ts|tsx)$ ]] && [[ ! "$FILE" =~ \.d\.ts$ ]]; then
+# Only run for TypeScript source/test files; skip .d.ts
+if [[ "$FILE" =~ /(src|tests)/.*\.(ts|tsx)$ ]] && [[ ! "$FILE" =~ \.d\.ts$ ]]; then
     cd "$CLAUDE_PROJECT_DIR"
 
     # TypeScript full compile

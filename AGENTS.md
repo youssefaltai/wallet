@@ -93,5 +93,5 @@ All planned work is tracked in Linear:
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `session-start.sh` | Session start | Load git status, recent commits, migration state |
-| `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately |
+| `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) or tests/**/*.ts | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately |
 | `pre-commit-branch-guard.sh` | Before any `git commit` Bash call | Block commits to `main` unless only `.claude/`, `AGENTS.md`, or `CLAUDE.md` files are staged |

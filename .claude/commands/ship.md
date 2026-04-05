@@ -13,8 +13,8 @@ Dispatch the **`checker`** agent. If any gate fails, stop and return the failure
 
 ```bash
 git branch --show-current          # branch name → extract WALLET-XX
-git log main..HEAD --oneline       # change summary
-git diff main..HEAD --stat         # diff stat
+git log origin/main..HEAD --oneline   # change summary (use origin/main — local main may be ahead)
+git diff origin/main..HEAD --stat     # diff stat
 ```
 
 Extract the Linear issue ID from the branch name (e.g. `fix/WALLET-5-overdraft` → `WALLET-5`).
