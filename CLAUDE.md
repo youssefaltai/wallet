@@ -139,13 +139,15 @@ src/
     actions.ts          # All server actions — heavy file, read before editing
     dashboard/          # Read-only summary cards (no mutation buttons here)
     accounts/           # Asset/liability account management
-    transactions/       # Expense/income/transfer records
+    transactions/       # Combined transaction list with filters
+    expenses/           # Expense-specific view
+    income/             # Income-specific view
     budgets/            # Period-based spending limits
     goals/              # Savings targets with backing accounts
     settings/           # Profile, data management
     chat/               # AI assistant interface
   app/(auth)/           # Login, signup, email verification
-  app/api/              # REST endpoints (chat, settings, conversations)
+  app/api/              # REST endpoints (chat, settings, conversations, auth)
   lib/ai/
     system-prompt.ts    # Static prompt (keep it static for Anthropic cache hits)
     tools/              # 30+ financial CRUD tools — see rules/ai-tools.md

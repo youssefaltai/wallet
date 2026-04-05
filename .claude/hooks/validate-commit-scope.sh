@@ -63,22 +63,19 @@ fi
 echo "Domains touched in this commit: ${UNIQUE_DOMAINS[*]:-unknown}"
 
 # Warn if multiple unrelated domains are present
-# Exception: config-only commits are always fine
-if [ "$DOMAIN_COUNT" -gt 1 ]; then
-    # Check if it's purely config
-    if [ "$DOMAIN_COUNT" -eq 1 ] && [[ "${UNIQUE_DOMAINS[0]}" == "config" ]]; then
-        echo "Config-only commit — OK."
-    else
-        echo ""
-        echo "WARNING: This commit touches $DOMAIN_COUNT domains: ${UNIQUE_DOMAINS[*]}"
-        echo ""
-        echo "Ask: do ALL staged files serve the same goal ('$BRANCH_PURPOSE')?"
-        echo "  - If YES: proceed — multi-layer changes for one feature are fine."
-        echo "  - If NO:  unstage the unrelated files, commit separately, or use /split-pr."
-        echo ""
-        echo "Staged files:"
-        echo "$STAGED" | sed 's/^/  /'
-    fi
+# Exception: config-only commits are always fine (single domain: config)
+if [ "$DOMAIN_COUNT" -eq 1 ] && [[ "${UNIQUE_DOMAINS[0]}" == "config" ]]; then
+    echo "Config-only commit — OK."
+elif [ "$DOMAIN_COUNT" -gt 1 ]; then
+    echo ""
+    echo "WARNING: This commit touches $DOMAIN_COUNT domains: ${UNIQUE_DOMAINS[*]}"
+    echo ""
+    echo "Ask: do ALL staged files serve the same goal ('$BRANCH_PURPOSE')?"
+    echo "  - If YES: proceed — multi-layer changes for one feature are fine."
+    echo "  - If NO:  unstage the unrelated files, commit separately, or use /split-pr."
+    echo ""
+    echo "Staged files:"
+    echo "$STAGED" | sed 's/^/  /'
 fi
 
 echo "--------------------------"
