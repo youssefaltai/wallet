@@ -60,7 +60,10 @@ INSTALL_TOKEN=$("$CLAUDE_PROJECT_DIR/.claude/hooks/generate-gh-app-token.sh" 2>/
 If `INSTALL_TOKEN` is non-empty, prefix the `gh pr create` call with `GH_TOKEN="$INSTALL_TOKEN"`. If empty (App not configured or token failed), proceed without it — fall back silently to the user's credentials.
 
 ```bash
-GH_TOKEN="$INSTALL_TOKEN" gh pr create \
+# Only export GH_TOKEN when we actually have a token — empty string would override stored credentials
+[ -n "$INSTALL_TOKEN" ] && export GH_TOKEN="$INSTALL_TOKEN"
+
+gh pr create \
   --title "{type}: {description} [WALLET-XX]" \
   --assignee youssefaltai \
   --reviewer youssefaltai \

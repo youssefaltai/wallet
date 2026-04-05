@@ -43,13 +43,13 @@ Grep for patterns that violate the double-entry rules:
 
 ```bash
 # Direct balance updates outside ledger.ts
-grep -rn "db\.update(accounts)\|db\.update(goals)" src/ --include="*.ts" | grep -v "ledger.ts"
+grep -Ern "db\.update\((accounts|goals)\)" src/ --include="*.ts" | grep -v "ledger.ts"
 
 # Direct journal line inserts outside ledger.ts
-grep -rn "db\.insert(journalLines)" src/ --include="*.ts" | grep -v "ledger.ts"
+grep -Ern "db\.insert\(journalLines\)" src/ --include="*.ts" | grep -v "ledger.ts"
 
 # Hard deletes on journal entries
-grep -rn "\.delete(journalLines\|journalEntries)" src/ --include="*.ts"
+grep -Ern "\.delete\((journalLines|journalEntries)\)" src/ --include="*.ts"
 ```
 
 Pass: no matches outside ledger.ts. Fail: list each violation with file:line.
