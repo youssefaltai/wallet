@@ -144,8 +144,28 @@ CREATE INDEX "exchange_rates_date_idx" ON "exchange_rates" USING btree ("date");
 CREATE INDEX "goals_user_idx" ON "goals" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "goals_account_idx" ON "goals" USING btree ("account_id");--> statement-breakpoint
 CREATE INDEX "journal_entries_user_date_idx" ON "journal_entries" USING btree ("user_id","date");--> statement-breakpoint
-CREATE INDEX "journal_entries_deleted_at_idx" ON "journal_entries" USING btree ("deleted_at");--> statement-breakpoint
+CREATE INDEX "journal_entries_deleted_at_idx" ON "journal_entries" USING btree ("deleted_at") WHERE "deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "journal_lines_entry_idx" ON "journal_lines" USING btree ("journal_entry_id");--> statement-breakpoint
 CREATE INDEX "journal_lines_account_idx" ON "journal_lines" USING btree ("account_id");--> statement-breakpoint
 CREATE INDEX "memories_user_idx" ON "memories" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "messages_conversation_created_idx" ON "messages" USING btree ("conversation_id","created_at");
+CREATE INDEX "messages_conversation_created_idx" ON "messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
+CREATE OR REPLACE FUNCTION check_journal_zero_sum()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  entry_id uuid;
+BEGIN
+  entry_id := COALESCE(NEW.journal_entry_id, OLD.journal_entry_id);
+  IF (
+    SELECT COALESCE(SUM(amount), 0)
+    FROM journal_lines
+    WHERE journal_entry_id = entry_id
+  ) <> 0 THEN
+    RAISE EXCEPTION 'Journal entry % lines do not sum to zero', entry_id;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER journal_lines_zero_sum
+  AFTER INSERT OR UPDATE OR DELETE ON journal_lines
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION check_journal_zero_sum();
