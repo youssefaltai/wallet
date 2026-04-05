@@ -19,6 +19,26 @@ except:
 if [[ "$FILE" =~ /(src|tests)/.*\.(ts|tsx)$ ]] && [[ ! "$FILE" =~ \.d\.ts$ ]]; then
     cd "$CLAUDE_PROJECT_DIR"
 
+    # Schema drift reminder — fires immediately when schema.ts is edited
+    if [[ "$FILE" =~ src/lib/db/schema\.ts$ ]]; then
+        SQL_COUNT=$(find src/lib/db/migrations -name "*.sql" 2>/dev/null | wc -l | tr -d ' ')
+        JOURNAL_COUNT=$(python3 -c "
+import json
+try:
+    d = json.load(open('src/lib/db/migrations/meta/_journal.json'))
+    print(len(d.get('entries', [])))
+except:
+    print('?')
+" 2>/dev/null)
+        echo ""
+        echo "=== schema.ts edited — migration reminder ==="
+        echo "Current: $SQL_COUNT SQL files, $JOURNAL_COUNT journal entries"
+        echo "If you changed a table/column: pnpm db:generate && pnpm db:migrate"
+        echo "Review the generated SQL before applying. See .claude/rules/migrations.md"
+        echo "============================================="
+        echo ""
+    fi
+
     # TypeScript full compile
     TS_OUTPUT=$(pnpm tsc --noEmit 2>&1)
     TS_EXIT=$?
