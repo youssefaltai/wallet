@@ -1,4 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS vector;--> statement-breakpoint
 CREATE TYPE "public"."ledger_account_type" AS ENUM('asset', 'liability', 'equity', 'income', 'expense');--> statement-breakpoint
 CREATE TABLE "accounts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -6,8 +5,8 @@ CREATE TABLE "accounts" (
 	"name" text NOT NULL,
 	"type" "ledger_account_type" NOT NULL,
 	"institution" text,
+	"currency" text DEFAULT 'USD' NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
-	"parent_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "accounts_user_name_unique" UNIQUE("user_id","name")
 );
@@ -16,11 +15,10 @@ CREATE TABLE "budgets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
 	"name" text NOT NULL,
-	"category_account_id" uuid,
+	"category_account_id" uuid NOT NULL,
 	"amount" bigint NOT NULL,
 	"start_date" date NOT NULL,
 	"end_date" date NOT NULL,
-	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "budget_dates_valid" CHECK ("budgets"."end_date" > "budgets"."start_date")
 );
@@ -44,6 +42,15 @@ CREATE TABLE "email_verification_codes" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "exchange_rates" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"base_currency" text NOT NULL,
+	"date" date NOT NULL,
+	"rates" jsonb NOT NULL,
+	"fetched_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "exchange_rates_base_date_unique" UNIQUE("base_currency","date")
+);
+--> statement-breakpoint
 CREATE TABLE "goals" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -51,19 +58,21 @@ CREATE TABLE "goals" (
 	"name" text NOT NULL,
 	"target_amount" bigint NOT NULL,
 	"deadline" date,
-	"status" text DEFAULT 'active' NOT NULL,
 	"notes" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "goals_status_check" CHECK ("goals"."status" IN ('active', 'completed', 'paused'))
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "journal_entries" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
-	"date" date NOT NULL,
+	"date" timestamp with time zone DEFAULT now() NOT NULL,
 	"description" text,
 	"notes" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"idempotency_key" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	CONSTRAINT "journal_entries_idempotency_key_unique" UNIQUE("idempotency_key")
 );
 --> statement-breakpoint
 CREATE TABLE "journal_lines" (
@@ -78,7 +87,6 @@ CREATE TABLE "memories" (
 	"user_id" uuid NOT NULL,
 	"content" text NOT NULL,
 	"tags" text[],
-	"embedding" vector(1536),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -110,7 +118,6 @@ CREATE TABLE "users" (
 	"email_verified" boolean DEFAULT false NOT NULL,
 	"image" text,
 	"currency" text DEFAULT 'USD' NOT NULL,
-	"onboarding_completed" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
@@ -118,7 +125,7 @@ CREATE TABLE "users" (
 --> statement-breakpoint
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "budgets" ADD CONSTRAINT "budgets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "budgets" ADD CONSTRAINT "budgets_category_account_id_accounts_id_fk" FOREIGN KEY ("category_account_id") REFERENCES "public"."accounts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "budgets" ADD CONSTRAINT "budgets_category_account_id_accounts_id_fk" FOREIGN KEY ("category_account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "email_verification_codes" ADD CONSTRAINT "email_verification_codes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "goals" ADD CONSTRAINT "goals_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -130,14 +137,35 @@ ALTER TABLE "memories" ADD CONSTRAINT "memories_user_id_users_id_fk" FOREIGN KEY
 ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "accounts_user_idx" ON "accounts" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "budgets_user_idx" ON "budgets" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "budgets_category_account_idx" ON "budgets" USING btree ("category_account_id");--> statement-breakpoint
 CREATE INDEX "conversations_user_idx" ON "conversations" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "email_verification_user_idx" ON "email_verification_codes" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "exchange_rates_date_idx" ON "exchange_rates" USING btree ("date");--> statement-breakpoint
 CREATE INDEX "goals_user_idx" ON "goals" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "goals_account_idx" ON "goals" USING btree ("account_id");--> statement-breakpoint
 CREATE INDEX "journal_entries_user_date_idx" ON "journal_entries" USING btree ("user_id","date");--> statement-breakpoint
+CREATE INDEX "journal_entries_deleted_at_idx" ON "journal_entries" USING btree ("deleted_at") WHERE "deleted_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "journal_lines_entry_idx" ON "journal_lines" USING btree ("journal_entry_id");--> statement-breakpoint
 CREATE INDEX "journal_lines_account_idx" ON "journal_lines" USING btree ("account_id");--> statement-breakpoint
 CREATE INDEX "memories_user_idx" ON "memories" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "messages_conversation_idx" ON "messages" USING btree ("conversation_id");--> statement-breakpoint
-ALTER TABLE "accounts" ADD CONSTRAINT "accounts_parent_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."accounts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "memories_embedding_idx" ON "memories" USING ivfflat ("embedding" vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX "messages_conversation_created_idx" ON "messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
+CREATE OR REPLACE FUNCTION check_journal_zero_sum()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  entry_id uuid;
+BEGIN
+  entry_id := COALESCE(NEW.journal_entry_id, OLD.journal_entry_id);
+  IF (
+    SELECT COALESCE(SUM(amount), 0)
+    FROM journal_lines
+    WHERE journal_entry_id = entry_id
+  ) <> 0 THEN
+    RAISE EXCEPTION 'Journal entry % lines do not sum to zero', entry_id;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER journal_lines_zero_sum
+  AFTER INSERT OR UPDATE OR DELETE ON journal_lines
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION check_journal_zero_sum();
