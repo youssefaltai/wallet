@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { cache } from "react";
@@ -6,6 +6,10 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { rateLimit } from "@/lib/rate-limit";
+
+class RateLimitError extends CredentialsSignin {
+  code = "rate_limited";
+}
 
 if (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
   throw new Error("AUTH_SECRET environment variable is required");
@@ -30,7 +34,7 @@ const nextAuth = NextAuth({
           5,
           15 * 60 * 1000,
         );
-        if (!allowed) return null;
+        if (!allowed) throw new RateLimitError();
 
         const [user] = await db
           .select()
