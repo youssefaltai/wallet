@@ -19,6 +19,7 @@ test.describe("Signup", () => {
     const email = uniqueEmail();
 
     await page.goto("/signup");
+    await page.getByLabel("Name").fill("Test User");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill("ValidPass123!");
     await page.getByRole("button", { name: "Sign up" }).click();
@@ -45,6 +46,7 @@ test.describe("Signup", () => {
 
     try {
       await page.goto("/signup");
+      await page.getByLabel("Name").fill("Duplicate User");
       await page.getByLabel("Email").fill(user.email);
       await page.getByLabel("Password").fill("AnotherPass123!");
       await page.getByRole("button", { name: "Sign up" }).click();
@@ -64,6 +66,7 @@ test.describe("Signup", () => {
 
     try {
       await page.goto("/signup");
+      await page.getByLabel("Name").fill("Unverified User");
       await page.getByLabel("Email").fill(user.email);
       await page.getByLabel("Password").fill(user.password);
       await page.getByRole("button", { name: "Sign up" }).click();
