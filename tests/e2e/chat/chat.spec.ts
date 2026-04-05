@@ -350,6 +350,12 @@ test.describe("AI Chat", () => {
         "Yes, confirmed. Account name is exactly 'Checking' (USD). Amount: $50 USD. Category: Groceries. Date: today. No description or notes needed. Please record the expense now.",
       );
     }
+    // Guard: if the loop exhausted without the AI completing, surface a meaningful
+    // assertion failure rather than a generic TimeoutError on the next line.
+    expect(
+      await page.getByText("Expense recorded").first().isVisible(),
+      "AI did not complete transaction after 4 confirmation rounds",
+    ).toBe(true);
 
     await waitForToolCompletion(page, "Expense recorded");
 
@@ -379,6 +385,10 @@ test.describe("AI Chat", () => {
         "Yes, confirmed. Account name: 'My Chase Checking'. Type: checking (asset). Currency: USD. Institution: Chase. No initial balance, no description. Please create it now.",
       );
     }
+    expect(
+      await page.getByText("Account created").isVisible(),
+      "AI did not complete account creation after 4 confirmation rounds",
+    ).toBe(true);
 
     await waitForToolCompletion(page, "Account created");
 
@@ -406,6 +416,10 @@ test.describe("AI Chat", () => {
         "Yes, confirmed. Goal name: 'Vacation Fund'. Target: $5000 USD. No deadline. No linked account. No description. Please create it now.",
       );
     }
+    expect(
+      await page.getByText("Goal created").isVisible(),
+      "AI did not complete goal creation after 4 confirmation rounds",
+    ).toBe(true);
 
     await waitForToolCompletion(page, "Goal created");
 
@@ -679,6 +693,9 @@ test.describe("AI Chat", () => {
     // the deletion completes.
     await waitForAssistantResponse(page);
 
+    // 5 rounds instead of 4: the AI typically calls get_budget_status first to
+    // look up the budget IDs, adding one extra round-trip before it's ready to
+    // accept a deletion confirmation.
     for (let i = 0; i < 5; i++) {
       if (await page.getByText("Budgets deleted").first().isVisible()) break;
       await sendConfirmationAndWait(
@@ -686,6 +703,10 @@ test.describe("AI Chat", () => {
         "Yes, correct. Delete both the April Rent budget and the May Rent budget. Confirmed.",
       );
     }
+    expect(
+      await page.getByText("Budgets deleted").first().isVisible(),
+      "AI did not complete budget deletion after 5 confirmation rounds",
+    ).toBe(true);
 
     await waitForToolCompletion(page, "Budgets deleted");
     await waitForAssistantResponse(page);

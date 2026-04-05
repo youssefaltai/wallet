@@ -525,14 +525,15 @@ test.describe("Cross-currency: Dashboard", () => {
 
     await authedPage.goto("/dashboard");
 
-    // Just verify the page loaded and shows dashboard stat cards with USD values
+    // FX rates are seeded deterministically in beforeEach (EUR: 0.85, GBP: 0.73)
+    // EUR assets: €10,000 / 0.85 = ~$11,764.71
+    // Total assets = $20,000 + $11,764.71 = ~$31,764
     const assetsCard = statCard(authedPage, "Assets");
-    await expect(assetsCard).toBeVisible();
-    await expect(assetsCard).toContainText("$");
+    await expect(assetsCard).toContainText("$31,764");
 
+    // GBP liabilities: £2,000 / 0.73 = ~$2,739.73
     const liabCard = statCard(authedPage, "Liabilities");
-    await expect(liabCard).toBeVisible();
-    await expect(liabCard).toContainText("$");
+    await expect(liabCard).toContainText("$2,739");
   });
 
   test("dashboard account cards show native currency formatting", async ({
@@ -1432,15 +1433,14 @@ test.describe("Cross-currency: Liabilities", () => {
 
     await authedPage.goto("/dashboard");
 
-    // Just verify the page loaded and shows the net worth card with some value
-    const netWorthCard = statCard(authedPage, "Net Worth");
-    await expect(netWorthCard).toBeVisible();
-    // Assets card exists and shows some USD value
+    // FX rates are seeded deterministically in beforeEach (EUR: 0.85)
+    // USD assets: $10,000 + EUR assets: €5,000 / 0.85 = ~$5,882.35 → total ~$15,882
     const assetsCard = statCard(authedPage, "Assets");
-    await expect(assetsCard).toContainText("$");
-    // Liabilities card shows some USD value
+    await expect(assetsCard).toContainText("$15,882");
+
+    // USD liability: $2,000 + EUR liability: €1,000 / 0.85 = ~$1,176.47 → total ~$3,176
     const liabCard = statCard(authedPage, "Liabilities");
-    await expect(liabCard).toContainText("$");
+    await expect(liabCard).toContainText("$3,176");
   });
 });
 

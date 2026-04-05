@@ -146,6 +146,12 @@ export const test = base.extend<TestFixtures>({
     // Next.js App Router components using useSearchParams (AppSidebar, DateSelector, etc.)
     // cause a brief double-render during React hydration. Waiting for network idle ensures
     // hydration is complete before any assertion runs.
+    //
+    // Scope note: this patch is intentionally applied to ALL navigations made by tests
+    // that use the `authedPage` fixture. `loginViaUI` above is NOT covered because it
+    // completes before the patch is installed — login has its own `waitForURL` strategy.
+    // Any test helper that internally calls `page.goto` WILL get the networkidle wait,
+    // which is the desired behaviour for post-login navigations.
     const originalGoto = page.goto.bind(page);
     page.goto = async (url: string, options?: Parameters<typeof page.goto>[1]) => {
       const response = await originalGoto(url, options);
