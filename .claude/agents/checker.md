@@ -58,9 +58,9 @@ Pass: no matches outside ledger.ts. Fail: list each violation with file:line.
 Grep for direct DB access in files that should only call services:
 
 ```bash
-# Direct DB queries in API routes, server actions, components, hooks, and AI tools
+# Direct DB queries in API routes, server actions, app pages/layouts, components, hooks, and AI tools
 grep -rn "db\.\(select\|insert\|update\|delete\|query\)" \
-  src/app/api/ src/app/\(app\)/actions.ts src/components/ src/hooks/ src/lib/ai/tools/ \
+  src/app/api/ src/app/\(app\)/ src/components/ src/hooks/ src/lib/ai/tools/ \
   --include="*.ts" --include="*.tsx" 2>/dev/null
 ```
 

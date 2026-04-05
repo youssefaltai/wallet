@@ -18,9 +18,9 @@ except:
 " 2>/dev/null)
 
 # Only check files outside the service layer that could contain stray DB access
-# Target: API routes, server actions, components, hooks, AI tools
+# Target: API routes, server actions, app route pages/layouts, components, hooks, AI tools
 if [[ "$FILE" =~ src/app/api/.*\.(ts|tsx)$ ]] || \
-   [[ "$FILE" =~ src/app/\(app\)/actions\.ts$ ]] || \
+   [[ "$FILE" =~ src/app/\(app\)/.*\.(ts|tsx)$ ]] || \
    [[ "$FILE" =~ src/components/.*\.(ts|tsx)$ ]] || \
    [[ "$FILE" =~ src/hooks/.*\.(ts|tsx)$ ]] || \
    [[ "$FILE" =~ src/lib/ai/tools/.*\.(ts|tsx)$ ]]; then
