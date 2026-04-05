@@ -29,8 +29,8 @@ git push -u origin HEAD
 ## Step 2: Gather context for the PR body
 
 ```bash
-git log main..HEAD --oneline
-git diff main..HEAD --stat
+git log origin/main..HEAD --oneline
+git diff origin/main..HEAD --stat
 ```
 
 ## Step 3: Create the PR
