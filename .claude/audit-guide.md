@@ -51,6 +51,7 @@ src/
       money.ts          # toMinorUnits, toMajorUnits, formatMoney, convert
       transactions.ts
       users.ts
+      email.ts
   components/
     chat/tool-cards/    # UI cards rendered for each AI tool result
     shared/             # Reusable form components

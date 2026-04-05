@@ -1,7 +1,8 @@
 #!/bin/bash
 # validate-commit-scope.sh
-# Fires after Bash tool calls that include "git commit".
-# Warns when staged files span unrelated domains, helping catch mixed-concern commits.
+# Fires before Bash tool calls — filters to git commit commands only.
+# Silent when commit is clean (single domain or config-only).
+# Warns when staged files span unrelated domains.
 # Receives tool event JSON via stdin.
 
 INPUT=$(cat)
@@ -53,32 +54,33 @@ has_domain '^\.claude/\|^AGENTS\.md$\|^CLAUDE\.md$' "config"
 UNIQUE_DOMAINS=($(printf '%s\n' "${DOMAINS[@]}" | sort -u))
 DOMAIN_COUNT=${#UNIQUE_DOMAINS[@]}
 
-# Print branch context reminder
+# Silent for clean commits — only speak when there's a problem
+# Config-only commits: always fine, stay silent
+if [ "$DOMAIN_COUNT" -eq 1 ] && [[ "${UNIQUE_DOMAINS[0]}" == "config" ]]; then
+    exit 0
+fi
+
+# Single-domain commit: silent — no news is good news
+if [ "$DOMAIN_COUNT" -le 1 ]; then
+    exit 0
+fi
+
+# Multi-domain: warn and ask Claude to verify intent
 echo ""
-echo "--- Commit scope check ---"
+echo "=== Commit scope warning ==="
 echo "Branch: $BRANCH"
 if [ -n "$BRANCH_PURPOSE" ] && [ "$BRANCH_PURPOSE" != "$BRANCH" ]; then
-    echo "Purpose (from branch name): $BRANCH_PURPOSE"
+    echo "Purpose: $BRANCH_PURPOSE"
 fi
-echo "Domains touched in this commit: ${UNIQUE_DOMAINS[*]:-unknown}"
-
-# Warn if multiple unrelated domains are present
-# Exception: config-only commits are always fine (single domain: config)
-if [ "$DOMAIN_COUNT" -eq 1 ] && [[ "${UNIQUE_DOMAINS[0]}" == "config" ]]; then
-    echo "Config-only commit — OK."
-elif [ "$DOMAIN_COUNT" -gt 1 ]; then
-    echo ""
-    echo "WARNING: This commit touches $DOMAIN_COUNT domains: ${UNIQUE_DOMAINS[*]}"
-    echo ""
-    echo "Ask: do ALL staged files serve the same goal ('$BRANCH_PURPOSE')?"
-    echo "  - If YES: proceed — multi-layer changes for one feature are fine."
-    echo "  - If NO:  unstage the unrelated files, commit separately, or use /split-pr."
-    echo ""
-    echo "Staged files:"
-    echo "$STAGED" | sed 's/^/  /'
-fi
-
-echo "--------------------------"
+echo "Domains in this commit ($DOMAIN_COUNT): ${UNIQUE_DOMAINS[*]}"
+echo ""
+echo "Ask: do ALL staged files serve the same goal ('$BRANCH_PURPOSE')?"
+echo "  - If YES: proceed — multi-layer changes for one feature are fine."
+echo "  - If NO:  unstage the unrelated files, commit separately, or use /split-pr."
+echo ""
+echo "Staged files:"
+echo "$STAGED" | sed 's/^/  /'
+echo "============================"
 echo ""
 
 exit 0
