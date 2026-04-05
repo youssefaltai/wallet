@@ -59,11 +59,14 @@ export default async function AccountDetailPage({
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   function buildHref(targetPage: number) {
-    const params = new URLSearchParams();
-    if (targetPage > 1) params.set("page", String(targetPage));
-    const qs = params.toString();
+    const p = new URLSearchParams();
+    if (targetPage > 1) p.set("page", String(targetPage));
+    const qs = p.toString();
     return `/accounts/${id}${qs ? `?${qs}` : ""}`;
   }
+
+  const prevHref = page > 1 ? buildHref(page - 1) : undefined;
+  const nextHref = page < totalPages ? buildHref(page + 1) : undefined;
 
   return (
     <div className="p-6 space-y-6">
@@ -154,7 +157,8 @@ export default async function AccountDetailPage({
           totalPages={totalPages}
           totalItems={totalCount}
           pageSize={PAGE_SIZE}
-          buildHref={buildHref}
+          prevHref={prevHref}
+          nextHref={nextHref}
         />
       </div>
       </AnimateIn>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useErrorDialog } from "@/hooks/use-error-dialog";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { Landmark, CreditCard, ArrowLeft, ArrowRightIcon, PencilIcon, PowerIcon, WalletIcon, SlidersHorizontalIcon } from "lucide-react";
@@ -61,21 +61,21 @@ export function AccountList({
   accounts,
   currency = "USD",
   totalFormatted,
+  dateParam,
 }: {
   accounts: AccountWithBalance[];
   currency?: string;
   totalFormatted: string;
+  dateParam?: string | null;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { showError, ErrorDialog } = useErrorDialog();
   const { confirm, ConfirmDialog } = useConfirmDialog();
 
   function transactionsUrl(accountId: string) {
     const params = new URLSearchParams();
     params.set("account", accountId);
-    const date = searchParams.get("date");
-    if (date) params.set("date", date);
+    if (dateParam) params.set("date", dateParam);
     return `/transactions?${params.toString()}`;
   }
   const [open, setOpen] = useState(false);
