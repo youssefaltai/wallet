@@ -85,6 +85,7 @@ All planned work is tracked in Linear:
 | `.claude/rules/services.md` | src/lib/services/ |
 | `.claude/rules/migrations.md` | src/lib/db/ |
 | `.claude/rules/ui-components.md` | src/app/(app)/**, src/components/**, src/hooks/** |
+| `.claude/rules/testing.md` | tests/**, playwright.config.ts |
 | `.claude/rules/linear.md` | all files — always active |
 | `.claude/rules/git-workflow.md` | all files — always active |
 
