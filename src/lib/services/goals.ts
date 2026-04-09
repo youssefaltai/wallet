@@ -416,6 +416,14 @@ export async function withdrawFromGoal(
       dstMinor = toMinorUnits(resolvedCreditAmount, dstCurrency);
     }
 
+    // Overdraft check: ensure goal account has sufficient balance (in its own currency)
+    const goalBalance = await getBalanceInTx(tx, goal.accountId);
+    if (goalBalance - goalMinor < 0n) {
+      throw new Error(
+        `Insufficient balance in goal. Available: ${formatMoney(goalBalance < 0n ? 0n : goalBalance, goalCurrency)}, required: ${formatMoney(goalMinor, goalCurrency)}.`,
+      );
+    }
+
     await createJournalEntry(
       userId,
       date,
