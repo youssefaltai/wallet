@@ -246,7 +246,7 @@ Any operation that reads a balance and then writes a journal entry based on it (
 
 **Fix:** Wrap the balance-check + journal-entry creation in a transaction with `SELECT FOR UPDATE` on the account row.
 
-**Status:** Not yet implemented. Flag any new service code that follows this pattern.
+**Status:** RESOLVED (2026-04-05, WALLET-5). `getBalanceInTx()` in both `goals.ts` and `transactions.ts` now appends `.for('update')` to the aggregate query, locking the underlying `journal_lines` rows for the account until the transaction commits. This serializes concurrent balance-check + debit operations on the same account.
 
 ### `batchFundGoals()` uses cached FX rates on the write path
 
