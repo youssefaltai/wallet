@@ -16,7 +16,7 @@ Every task is handled by a dedicated agent. Agents run in parallel whenever thei
 |-------|------|-------|
 | `planner` | Designs implementation plans. Reads code, maps files to change, estimates appetite, identifies risks. Does NOT modify files. | Read, Grep, Glob, Bash |
 | `implementer` | Executes a plan from `planner`. Writes code in dependency order (schema → services → tools → routes → UI → tests). | Read, Write, Edit, Bash, Glob, Grep |
-| `fixer` | Implements a specific bug fix. Traces root cause, makes the minimal change. | Read, Write, Edit, Bash, Glob, Grep |
+| `fixer` | Implements a specific bug fix. Traces root cause, makes the minimal change. Use for single-concern bugs (one root cause, ≤3 files). Use `implementer` instead for multi-file or multi-layer changes. | Read, Write, Edit, Bash, Glob, Grep |
 | `migrator` | Handles DB schema changes. Edits schema.ts, generates + reviews migration SQL, applies it, updates all dependent files. | Read, Write, Edit, Bash, Glob, Grep |
 | `checker` | Runs all quality gates: TypeScript, ESLint, migration sync, financial invariant grep, E2E tests. Returns pass/fail per gate. | Bash, Glob, Grep, Read |
 | `shipper` | Pushes branch + creates PR with full metadata (title, labels, body, assignee, reviewer). Returns PR number and URL. | Bash |
@@ -102,3 +102,4 @@ All planned work is tracked in Linear:
 | `post-edit-db-guard.sh` | After Edit/Write on api routes, app pages/layouts, actions.ts, components, hooks, ai/tools | Warn when direct `db.select/insert/update/delete` calls are detected outside the service layer |
 | `pre-commit-branch-guard.sh` | Before any `git commit` or `git push` Bash call | Block commits to `main` (unless .claude/ only); block force-push to main |
 | `validate-commit-scope.sh` | Before every Bash call (filters to `git commit` internally) | Silent for clean single-domain commits. Warns only when staged files span unrelated domains — no noise on normal commits |
+| `post-edit-system-prompt-check.sh` | After Edit/Write on `src/lib/ai/system-prompt.ts` | Warn if template literals, date calls, or user-specific data injected — static prompt required for Anthropic prompt caching |
