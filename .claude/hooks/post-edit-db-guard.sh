@@ -20,14 +20,14 @@ except:
 # Only check files outside the service layer that could contain stray DB access
 # Target: API routes, server actions, app route pages/layouts, components, hooks, AI tools
 if [[ "$FILE" =~ src/app/api/.*\.(ts|tsx)$ ]] || \
-   [[ "$FILE" =~ src/app/\(app\)/.*\.(ts|tsx)$ ]] || \
+   [[ "$FILE" =~ src/app/[(]app[)]/.*\.(ts|tsx)$ ]] || \
    [[ "$FILE" =~ src/components/.*\.(ts|tsx)$ ]] || \
    [[ "$FILE" =~ src/hooks/.*\.(ts|tsx)$ ]] || \
    [[ "$FILE" =~ src/lib/ai/tools/.*\.(ts|tsx)$ ]]; then
 
     # Check for direct DB query calls (not in services)
     VIOLATIONS=$(grep -nE \
-        'db\.(select|insert|update|delete|query)\b' \
+        'db\.(select|insert|update|delete|query|transaction|execute)\b' \
         "$FILE" 2>/dev/null)
 
     if [ -n "$VIOLATIONS" ]; then

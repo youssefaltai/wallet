@@ -23,7 +23,7 @@ if [[ "$COMMAND" == git\ push* ]]; then
     HAS_FORCE=false
     HAS_MAIN=false
     [[ "$COMMAND" == *"--force"* || "$COMMAND" == *" -f"* || "$COMMAND" == *" -f "* ]] && HAS_FORCE=true
-    [[ "$COMMAND" == *"main"* ]] && HAS_MAIN=true
+    [[ "$COMMAND" =~ (^|[[:space:]])main([[:space:]]|$) ]] && HAS_MAIN=true
 
     if $HAS_FORCE && $HAS_MAIN; then
         echo "ERROR: Force-pushing to main is not allowed."
