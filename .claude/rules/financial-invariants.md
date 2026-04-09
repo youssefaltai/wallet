@@ -87,11 +87,20 @@ There are no shared accounts, shared goals, or shared budgets. Every row belongs
 ✗  where(eq(accounts.id, accountId))  // no userId filter — authorization hole
 ```
 
-## 7. Overdraft prevention (not yet implemented — tracked in Linear)
+## 7. Overdraft prevention
 
 For goal funding and transfers between accounts: verify the source account has sufficient balance BEFORE creating the journal entry, using a SELECT FOR UPDATE to prevent TOCTOU races.
 
-Until this is implemented, flag any new code that creates journal entries without a balance check. See audit-guide.md "Known Open Issues" for context.
+`getBalanceInTx()` in both `goals.ts` and `transactions.ts` implements this correctly. It must be used for any new code that checks a balance and then debits it.
+
+```typescript
+// Inside db.transaction():
+const balance = await getBalanceInTx(tx, accountId); // locks account row FOR UPDATE, then reads balance
+if (balance - debitAmount < 0n) throw new Error("Insufficient balance");
+await createJournalEntry(userId, date, desc, null, lines, tx); // commits while lock held
+```
+
+`getBalanceInTx()` uses `SELECT id FROM accounts WHERE id = $accountId FOR UPDATE` to lock the account row first (PostgreSQL does not allow `FOR UPDATE` on aggregate queries), then computes the balance from `journal_lines` in a separate query. The lock is released when the surrounding `db.transaction()` commits or rolls back.
 
 ## 8. Destructive AI operations require confirmation
 

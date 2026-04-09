@@ -246,7 +246,7 @@ Any operation that reads a balance and then writes a journal entry based on it (
 
 **Fix:** Wrap the balance-check + journal-entry creation in a transaction with `SELECT FOR UPDATE` on the account row.
 
-**Status:** Not yet implemented. Flag any new service code that follows this pattern.
+**Status:** RESOLVED (2026-04-09, WALLET-5). `getBalanceInTx()` in `goals.ts` and `transactions.ts` issues `SELECT id FROM accounts WHERE id = $accountId FOR UPDATE` to lock the account row first (PostgreSQL does not allow `FOR UPDATE` on aggregate queries), then computes the balance from `journal_lines` in a separate query. This serializes concurrent balance-check + debit operations on the same account. `withdrawFromGoal()` also received the same balance check + lock that `fundGoal()` had.
 
 ### `batchFundGoals()` uses cached FX rates on the write path
 

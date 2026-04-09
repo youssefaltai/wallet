@@ -178,8 +178,19 @@ function buildConditions(
 
 // ── Write ─────────────────────────────────────────────────────────────────
 
-/** Query current account balance within the given transaction context (minor units). */
+/**
+ * Query current account balance within the given transaction context (minor units).
+ *
+ * Acquires a row-level lock on the account row (SELECT FOR UPDATE) before reading
+ * the balance, serializing concurrent check-then-debit operations and preventing
+ * TOCTOU races under PostgreSQL READ COMMITTED.
+ */
 async function getBalanceInTx(tx: Tx, accountId: string): Promise<bigint> {
+  // Lock the account row to prevent concurrent transactions from racing on the
+  // same account. PostgreSQL does not allow FOR UPDATE on aggregate queries, so
+  // we lock the account row separately, then compute the balance.
+  await tx.execute(sql`SELECT id FROM accounts WHERE id = ${accountId} FOR UPDATE`);
+
   const [row] = await tx
     .select({ balance: sql<string>`COALESCE(SUM(${journalLines.amount}), 0)` })
     .from(journalLines)
