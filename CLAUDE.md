@@ -139,13 +139,15 @@ src/
     actions.ts          # All server actions — heavy file, read before editing
     dashboard/          # Read-only summary cards (no mutation buttons here)
     accounts/           # Asset/liability account management
-    transactions/       # Expense/income/transfer records
+    transactions/       # Combined transaction list with filters
+    expenses/           # Expense-specific view
+    income/             # Income-specific view
     budgets/            # Period-based spending limits
     goals/              # Savings targets with backing accounts
     settings/           # Profile, data management
     chat/               # AI assistant interface
   app/(auth)/           # Login, signup, email verification
-  app/api/              # REST endpoints (chat, settings, conversations)
+  app/api/              # REST endpoints (chat, settings, conversations, auth)
   lib/ai/
     system-prompt.ts    # Static prompt (keep it static for Anthropic cache hits)
     tools/              # 30+ financial CRUD tools — see rules/ai-tools.md
@@ -160,12 +162,17 @@ src/
     goals.ts
     budgets.ts
     fx-rates.ts
+    conversations.ts
+    memories.ts
+    categories.ts
+    users.ts
+    email.ts
   components/
     chat/tool-cards/    # UI cards rendered per AI tool result
     shared/             # Reusable form components
 ```
 
-See `.claude/rules/` for domain-specific rules loaded contextually.
+See `.claude/rules/` for domain-specific rules loaded contextually. Key rules: `financial-invariants.md` (money/ledger), `server-actions.md` (actions.ts pattern), `services.md` (service layer), `api-routes.md`, `migrations.md`, `ui-components.md`, `testing.md`.
 See `.claude/agents/` for available subagents.
 See `.claude/commands/` for workflow commands.
 

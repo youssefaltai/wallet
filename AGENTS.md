@@ -41,7 +41,8 @@ Run agents in parallel when their inputs don't depend on each other:
 |---------|---------------------------|
 | `/feature <desc>` | Dispatches `planner` ∥ Linear lookup → confirms plan → [`migrator`?] → `implementer` → `checker` → `shipper` → `reviewer` |
 | `/fix <issue>` | Linear lookup → branch → `fixer` → `checker` → `shipper` → `reviewer` |
-| `/ship` | `checker` → `shipper` → Linear update → `reviewer` |
+| `/ship` | PR hygiene pre-flight (SRP check) → `checker` → `shipper` → Linear update → `reviewer` |
+| `/split-pr` | Audits a mixed-concern branch → creates per-concern branches → cherry-picks commits → ships focused PRs |
 | `/review-pr [number]` | Dispatches `reviewer` with PR number (or current branch) |
 | `/migrate <desc>` | Dispatches `migrator` |
 | `/check` | Dispatches `checker` |
@@ -83,16 +84,21 @@ All planned work is tracked in Linear:
 | `.claude/rules/api-routes.md` | src/app/api/ |
 | `.claude/rules/ai-tools.md` | src/lib/ai/tools/, system-prompt.ts |
 | `.claude/rules/services.md` | src/lib/services/ |
+| `.claude/rules/server-actions.md` | src/app/(app)/actions.ts |
+| `.claude/rules/auth.md` | src/lib/auth.ts, src/app/(auth)/ |
 | `.claude/rules/migrations.md` | src/lib/db/ |
 | `.claude/rules/ui-components.md` | src/app/(app)/**, src/components/**, src/hooks/** |
 | `.claude/rules/testing.md` | tests/**, playwright.config.ts |
 | `.claude/rules/linear.md` | all files — always active |
 | `.claude/rules/git-workflow.md` | all files — always active |
+| `.claude/rules/pr-hygiene.md` | all files — always active (SRP, pre-ship checklist, split guidance) |
 
 # Hooks
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `session-start.sh` | Session start | Load git status, recent commits, migration state |
-| `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) or tests/**/*.ts | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately |
-| `pre-commit-branch-guard.sh` | Before any `git commit` Bash call | Block commits to `main` unless only `.claude/`, `AGENTS.md`, or `CLAUDE.md` files are staged |
+| `session-start.sh` | Session start | Load git status, recent commits, migration state, open PRs |
+| `post-edit-typecheck.sh` | After Edit/Write on src/**/*.ts(x) or tests/**/*.ts | Run `pnpm tsc --noEmit` + `eslint <file>`, show errors immediately; if `schema.ts` was edited, print migration reminder |
+| `post-edit-db-guard.sh` | After Edit/Write on api routes, app pages/layouts, actions.ts, components, hooks, ai/tools | Warn when direct `db.select/insert/update/delete` calls are detected outside the service layer |
+| `pre-commit-branch-guard.sh` | Before any `git commit` or `git push` Bash call | Block commits to `main` (unless .claude/ only); block force-push to main |
+| `validate-commit-scope.sh` | Before every Bash call (filters to `git commit` internally) | Silent for clean single-domain commits. Warns only when staged files span unrelated domains — no noise on normal commits |

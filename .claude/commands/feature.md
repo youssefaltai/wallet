@@ -15,6 +15,8 @@ Wait for both to complete. Present the plan to the user and **wait for confirmat
 
 After confirmation:
 
+**Scope lock:** once the branch is created in this step, its scope is fixed to the approved plan. Any other problem or improvement discovered during implementation must be filed as a separate Linear issue and handled on a separate branch — never added to this branch. "While I was in here" additions are the root cause of messy PRs.
+
 1. Call `save_issue` with:
    - Title: ≤70 chars
    - Description: plan summary (appetite, files, done criteria)

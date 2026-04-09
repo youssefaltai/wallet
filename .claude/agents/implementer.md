@@ -36,6 +36,7 @@ Implement in dependency order to avoid cascading TypeScript errors:
 - `src/app/api/` → read `.claude/rules/api-routes.md`
 - `src/lib/ai/tools/` or `src/lib/ai/system-prompt.ts` → read `.claude/rules/ai-tools.md`
 - `src/lib/db/` or migrations → read `.claude/rules/migrations.md`
+- `src/app/(app)/actions.ts` → read `.claude/rules/server-actions.md` and `.claude/rules/financial-invariants.md`
 - `src/components/` or `src/app/(app)/` → read `.claude/rules/ui-components.md`
 
 **Stay in scope.** Only implement what the plan specifies. If something adjacent seems broken, note it — don't fix it.

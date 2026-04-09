@@ -18,8 +18,14 @@ except:
 " 2>/dev/null)
 
 # Guard 1: Block force-push to main (command must start with "git push")
-if [[ "$COMMAND" == git\ push\ * ]] || [[ "$COMMAND" == git\ push ]]; then
-    if [[ "$COMMAND" == *"--force"*"main"* ]] || [[ "$COMMAND" == *"-f"*"main"* ]]; then
+if [[ "$COMMAND" == git\ push* ]]; then
+    # Check for --force or -f flag AND "main" anywhere in the command
+    HAS_FORCE=false
+    HAS_MAIN=false
+    [[ "$COMMAND" == *"--force"* || "$COMMAND" == *" -f"* || "$COMMAND" == *" -f "* ]] && HAS_FORCE=true
+    [[ "$COMMAND" =~ (^|[[:space:]])main([[:space:]]|$) ]] && HAS_MAIN=true
+
+    if $HAS_FORCE && $HAS_MAIN; then
         echo "ERROR: Force-pushing to main is not allowed."
         echo ""
         echo "If you need to update main, use a PR and squash merge."

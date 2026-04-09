@@ -15,12 +15,14 @@ src/
       accounts/
       budgets/
       goals/
-      transactions/
+      transactions/     # Combined transaction list with filters
+      expenses/         # Expense-specific view
+      income/           # Income-specific view
       settings/
       chat/
     (auth)/             # Unauthenticated routes
     api/
-      auth/             # signup, login, verify-email, send-verification, user-email
+      auth/             # [nextauth], signup, verify-email, send-verification, user-email
       chat/route.ts     # Core AI streaming endpoint
       conversations/
       settings/         # account, profile, chats, memories
@@ -32,7 +34,7 @@ src/
         financial-write.ts  # Mutation tools (create_transaction, fund_goal, etc.)
         memory.ts           # Memory CRUD tools
         settings.ts         # Delete account/chats/memories tools
-        amount-schemas.ts   # Shared Zod schemas for monetary amounts
+        amount-schemas.ts   # Shared Zod schemas for monetary amounts (import, don't duplicate)
     auth.ts             # NextAuth v5 config + cachedAuth()
     db/
       schema.ts         # Drizzle ORM schema (13 tables)
@@ -49,6 +51,7 @@ src/
       money.ts          # toMinorUnits, toMajorUnits, formatMoney, convert
       transactions.ts
       users.ts
+      email.ts
   components/
     chat/tool-cards/    # UI cards rendered for each AI tool result
     shared/             # Reusable form components
