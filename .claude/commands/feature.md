@@ -25,11 +25,24 @@ After confirmation:
    - State: In Progress
    - Note the **WALLET-XX** identifier
 
-2. Create the branch:
+2. **Preflight**: verify this cwd is safe to branch in. Both checks MUST pass before running any `git checkout`:
+   - **Working tree is clean**: `git status --porcelain` must produce zero output. If not, STOP and ask the user whether the pending work belongs elsewhere.
+   - **No concurrent Claude session**: if the SessionStart context shows `⚠️  CONCURRENT CLAUDE SESSION DETECTED`, use the worktree alternative below instead of `git checkout`.
+
+3. Create the branch.
+
+   **Default path — single-session cwd, clean tree:**
    ```bash
    git checkout main && git pull
    git checkout -b feat/WALLET-{number}-{short-description}
    ```
+
+   **Worktree alternative — use when another session is active or the user is running parallel tasks:**
+   ```bash
+   git worktree add ../wallet-WALLET-{number} -b feat/WALLET-{number}-{short-description} main
+   cd ../wallet-WALLET-{number}
+   ```
+   Tell the user the worktree path. All subsequent implementation happens there.
 
 ## Phase 3: Migration (if required)
 
