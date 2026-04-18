@@ -28,7 +28,7 @@ UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null | head -10)
 # Each Claude session writes to ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl.
 PROJECT_SESSION_DIR="$HOME/.claude/projects/$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')"
 CONCURRENT_WARNING=""
-if [ -d "$PROJECT_SESSION_DIR" ] && [ -n "$SESSION_ID" ]; then
+if [ -n "$SESSION_ID" ] && [ -d "$PROJECT_SESSION_DIR" ]; then
     SIBLINGS=$(find "$PROJECT_SESSION_DIR" -maxdepth 1 -name "*.jsonl" -mmin -3 2>/dev/null \
         | grep -v "/${SESSION_ID}\.jsonl$" \
         | head -5)
@@ -52,6 +52,18 @@ $(echo "$SIBLINGS" | sed 's|.*/|    |; s|\.jsonl$||')
      git operation as potentially colliding until the sibling's .jsonl stops
      updating."
     fi
+else
+    # Fail-visible: if we can't identify our session (empty stdin, malformed
+    # JSON, or the hook input schema changed), detection is silently useless.
+    # Emit a soft advisory so the user knows to treat git operations as
+    # potentially colliding until they've visually confirmed they're alone.
+    CONCURRENT_WARNING="
+
+ℹ️  CONCURRENT-SESSION DETECTION UNAVAILABLE — could not read session_id from hook input.
+  This session may or may not be the only Claude running in $CLAUDE_PROJECT_DIR.
+  Before any \`git checkout\` / \`git stash\`, confirm visually that no other
+  Claude terminal tabs are active in this cwd, or use a worktree for safety:
+    git worktree add ../wallet-WALLET-XX -b {type}/WALLET-XX-description main"
 fi
 
 # Check migration state

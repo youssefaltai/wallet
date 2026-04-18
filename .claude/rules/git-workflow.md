@@ -27,6 +27,25 @@ git checkout -b {type}/WALLET-{number}-...
 git stash pop
 ```
 
+## Parallel Work — One Session Per Working Directory
+
+**Never run two Claude sessions in the same working directory.** Git state is shared: one session's `git checkout` silently auto-stashes the other's uncommitted work onto the wrong branch (see WALLET-41 for the incident).
+
+**When parallel work is needed, use a worktree per task** instead of the `git checkout -b` above:
+
+```bash
+git worktree add ../wallet-WALLET-{number} -b {type}/WALLET-{number}-{description} main
+cd ../wallet-WALLET-{number}
+# all subsequent work — implementation, tests, ship — happens inside the worktree
+```
+
+After the PR merges, clean up:
+```bash
+git worktree remove ../wallet-WALLET-{number}
+```
+
+**How to know when a worktree is required:** the SessionStart hook emits a `⚠️  CONCURRENT CLAUDE SESSION DETECTED` block in the session context when a sibling session is active in this cwd. Both `/fix` and `/feature` have a preflight step that forbids `git checkout main` when that warning is present — they use the worktree path instead. Sub-agents dispatched from those commands inherit the same rule: if the warning is in the session context, don't touch shared-cwd branches.
+
 ## Branch Naming
 
 Format: `{type}/WALLET-{number}-{kebab-description}`
