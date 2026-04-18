@@ -71,17 +71,20 @@ export function ChatInterface({
   // Fetch messages client-side to avoid RSC serialization stripping tool parts
   useEffect(() => {
     if (!conversationId) return;
-    fetch(`/api/conversations?id=${conversationId}`)
+    const controller = new AbortController();
+    fetch(`/api/conversations?id=${conversationId}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((msgs: UIMessage[]) => {
         setMessages(msgs);
         setLoaded(true);
       })
       .catch((err) => {
+        if (err.name === "AbortError") return;
         console.error("Failed to load conversation", err);
         setLoadError("Failed to load conversation");
         setLoaded(true);
       });
+    return () => controller.abort();
   }, [conversationId, setMessages]);
 
   const isLoading = status === "submitted" || status === "streaming";
