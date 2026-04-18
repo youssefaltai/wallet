@@ -181,7 +181,7 @@ export async function deleteJournalEntry(
   userId: string,
   tx: Tx = db,
 ) {
-  await tx
+  const result = await tx
     .update(journalEntries)
     .set({ deletedAt: new Date() })
     .where(
@@ -190,5 +190,12 @@ export async function deleteJournalEntry(
         eq(journalEntries.userId, userId),
         isNull(journalEntries.deletedAt),
       ),
+    )
+    .returning({ id: journalEntries.id });
+
+  if (result.length === 0) {
+    throw new Error(
+      `Journal entry ${journalEntryId} not found or already deleted`,
     );
+  }
 }
