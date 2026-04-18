@@ -87,6 +87,10 @@ Classify each changed path and build the list of test directories to run. Use th
 | `src/lib/services/ledger.ts` or `src/lib/services/money.ts` or `src/lib/services/fx-rates.ts` | `tests/e2e/cross-cutting/` + every feature suite that moves money (`accounts`, `transactions`, `expenses`, `goals`, `budgets`) |
 | `src/lib/services/<feature>.ts` (e.g. `goals.ts`, `budgets.ts`) | `tests/e2e/<feature>/` |
 | `src/app/(app)/<feature>/` | `tests/e2e/<feature>/` |
+| `src/app/(app)/income/` or `src/app/(app)/expenses/` | `tests/e2e/transactions/` + `tests/e2e/expenses/` (income is a filtered transactions view; no `tests/e2e/income/` exists) |
+| `src/lib/services/categories.ts` | `tests/e2e/transactions/` |
+| `src/lib/services/transactions.ts` | `tests/e2e/transactions/` + `tests/e2e/expenses/` |
+| `src/lib/services/email.ts` | `tests/e2e/auth/` (only used by signup/verify flows) |
 | `src/lib/ai/` or `src/app/(app)/chat/` or `src/app/api/chat/` | `tests/e2e/chat/` |
 | `src/app/(auth)/` or `src/app/api/auth/` | `tests/e2e/auth/` |
 | `src/app/(app)/settings/` or `src/app/api/settings/` | `tests/e2e/settings/` |
