@@ -12,9 +12,9 @@
  */
 
 import { db } from "@/lib/db";
-import { accounts, goals } from "@/lib/db/schema";
+import { accounts, goals, journalLines, journalEntries } from "@/lib/db/schema";
 import type { ledgerAccountType } from "@/lib/db/schema";
-import { eq, and, notInArray, or, sql } from "drizzle-orm";
+import { eq, and, notInArray, or, sql, isNull } from "drizzle-orm";
 import { getAccountBalances, createJournalEntry, type Tx } from "./ledger";
 import { toMajorUnits, toMinorUnits, formatMoney } from "./money";
 
@@ -242,6 +242,8 @@ export async function adjustAccountBalance(
   newDisplayBalance: number,
 ): Promise<AccountWithBalance> {
   const run = async (tx: Tx) => {
+    // Lock the row immediately so concurrent adjustments on the same account
+    // serialize — the second caller blocks here until the first commits.
     const [account] = await tx
       .select()
       .from(accounts)
@@ -252,16 +254,19 @@ export async function adjustAccountBalance(
           or(eq(accounts.type, "asset"), eq(accounts.type, "liability")),
         ),
       )
+      .for("update")
       .limit(1);
 
     if (!account) throw new Error("Account not found");
 
-    // Serialize concurrent adjustments: block until the previous transaction
-    // holding this row commits, so the subsequent balance read is always fresh.
-    await tx.execute(sql`SELECT id FROM accounts WHERE id = ${accountId} FOR UPDATE`);
-
-    const balances = await getAccountBalances([accountId]);
-    const currentRaw = balances.get(accountId) ?? 0n;
+    // Read balance inside the transaction so the result reflects any journal
+    // lines written by the transaction that just released the row lock above.
+    const [balanceRow] = await tx
+      .select({ balance: sql<string>`COALESCE(SUM(${journalLines.amount}), 0)` })
+      .from(journalLines)
+      .innerJoin(journalEntries, eq(journalLines.journalEntryId, journalEntries.id))
+      .where(and(eq(journalLines.accountId, accountId), isNull(journalEntries.deletedAt)));
+    const currentRaw = BigInt(balanceRow?.balance ?? "0");
 
     const newRaw = isLiability(account.type)
       ? -toMinorUnits(newDisplayBalance, account.currency)
