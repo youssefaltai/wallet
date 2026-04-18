@@ -55,6 +55,26 @@ Creates a Linear issue, returns the `WALLET-XX` ID.
 - Always squash merge — one clean commit per PR on main
 - Linear issue flow: Backlog → In Progress (branch) → In Review (PR open) → Done (merged)
 
+## Parallel Work — One Session Per Working Directory
+
+**Never run two Claude sessions in the same working directory.** Git state is shared: one session's `git checkout` silently auto-stashes the other's uncommitted work onto the wrong branch. This already happened once (WALLET-41) — the recovery required manual stash juggling.
+
+**When you (the user) want to run parallel tasks:** use a worktree per task. The existing `/Users/youssef/wallet-WALLET-39` worktree is the pattern.
+
+```bash
+# From the main checkout (/Users/youssef/wallet):
+git worktree add ../wallet-WALLET-{number} -b {type}/WALLET-{number}-{description} main
+cd ../wallet-WALLET-{number}
+claude    # start the parallel session here
+```
+
+When the branch is merged and you're done:
+```bash
+git worktree remove ../wallet-WALLET-{number}
+```
+
+**What Claude does on SessionStart:** scans `~/.claude/projects/.../` for sibling session files modified in the last 3 minutes and emits a loud `⚠️  CONCURRENT CLAUDE SESSION DETECTED` warning in the session context if one is found. `/fix` and `/feature` both refuse to run `git checkout main` when the warning is present or when the working tree is dirty — instead they use the worktree path.
+
 **What the user does:** state goals, review plans, merge PRs, manage Linear priorities.
 
 **What Claude handles:** branching, implementing, all quality gates, PR creation, Linear lifecycle, `.claude/` configuration.
