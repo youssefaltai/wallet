@@ -27,24 +27,34 @@ export function ChatInterface({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // activeConvId tracks the live conversation ID. It starts as the prop value
-  // and may be updated by the server after the first message in a new chat.
+  // activeConvId tracks the live conversation ID. `latest` is a stable mutable
+  // object the transport closures read from so they always see the current ID
+  // — `useChat` pins the transport on first render via useRef, so a stateful
+  // closure would stay stuck on the initial `undefined` and every subsequent
+  // message would create a fresh conversation server-side.
   const [activeConvId, setActiveConvId] = useState(conversationId);
+  const [latest] = useState<{ convId: string | undefined }>(() => ({
+    convId: conversationId,
+  }));
 
-  // Recreate the transport whenever the active conversation ID changes, so the
-  // body closure always captures the right ID. This is the React-idiomatic way
-  // to pass changing values into a transport without refs.
-  const transport = new DefaultChatTransport({
-    body: () => ({ conversationId: activeConvId }),
-    fetch: async (url, init) => {
-      const response = await globalThis.fetch(url, init);
-      const newId = response.headers.get("X-Conversation-Id");
-      if (newId && newId !== activeConvId) {
-        setActiveConvId(newId);
-      }
-      return response;
-    },
-  });
+  // Lazy `useState` initializer builds the transport exactly once. A plain
+  // `new DefaultChatTransport()` in the render body would be recreated each
+  // render, but `useChat` pins the first one it sees.
+  const [transport] = useState(
+    () =>
+      new DefaultChatTransport<UIMessage>({
+        body: () => ({ conversationId: latest.convId }),
+        fetch: async (url, init) => {
+          const response = await globalThis.fetch(url, init);
+          const newId = response.headers.get("X-Conversation-Id");
+          if (newId && newId !== latest.convId) {
+            latest.convId = newId;
+            setActiveConvId(newId);
+          }
+          return response;
+        },
+      }),
+  );
 
   const { messages, setMessages, sendMessage, status, stop, error } = useChat({
     ...(conversationId != null ? { id: conversationId } : {}),
