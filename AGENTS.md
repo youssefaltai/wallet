@@ -18,7 +18,7 @@ Every task is handled by a dedicated agent. Agents run in parallel whenever thei
 | `implementer` | Executes a plan from `planner`. Writes code in dependency order (schema → services → tools → routes → UI → tests). | Read, Write, Edit, Bash, Glob, Grep |
 | `fixer` | Implements a specific bug fix. Traces root cause, makes the minimal change. Use for single-concern bugs (one root cause, ≤3 files). Use `implementer` instead for multi-file or multi-layer changes. | Read, Write, Edit, Bash, Glob, Grep |
 | `migrator` | Handles DB schema changes. Edits schema.ts, generates + reviews migration SQL, applies it, updates all dependent files. | Read, Write, Edit, Bash, Glob, Grep |
-| `checker` | Runs all quality gates: TypeScript, ESLint, migration sync, financial invariant grep, E2E tests. Returns pass/fail per gate. | Bash, Glob, Grep, Read |
+| `checker` | Runs all quality gates: TypeScript, ESLint, migration sync, financial invariant grep, and E2E tests **scoped to the diff** (full suite skipped when no `src/` changed). Returns pass/fail per gate. | Bash, Glob, Grep, Read |
 | `shipper` | Pushes branch + creates PR with full metadata (title, labels, body, assignee, reviewer). Returns PR number and URL. | Bash |
 | `reviewer` | Reviews a PR diff with domain-specific checks, then submits `gh pr review` (approve / request-changes / comment). | Bash, Glob, Grep, Read |
 | `auditor` | 13-domain codebase audit. Produces a unified severity-ranked findings report. | Read, Grep, Glob, Bash |
