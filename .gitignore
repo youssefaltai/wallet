@@ -42,7 +42,6 @@ next-env.d.ts
 
 # Development artifacts
 *.png
-.claude/
 .playwright-mcp/
 
 # playwright
