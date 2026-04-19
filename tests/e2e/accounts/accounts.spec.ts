@@ -307,8 +307,12 @@ test.describe("Accounts page", () => {
     await authedPage.goto("/dashboard");
     await expect(authedPage.locator("h1", { hasText: "Dashboard" })).toBeVisible();
 
-    // Find the "View all" link next to the Accounts heading
-    const viewAllLink = authedPage.locator("h2", { hasText: "Accounts" }).locator("..").getByRole("link", { name: "View all" });
+    // Dashboard CardTitle is a div (data-slot="card-title"), not an h2
+    const viewAllLink = authedPage
+      .locator('[data-slot="card-title"]')
+      .filter({ hasText: /^Accounts$/ })
+      .locator("..")
+      .getByRole("link", { name: "View all" });
     await viewAllLink.click();
 
     // Should navigate to /accounts
