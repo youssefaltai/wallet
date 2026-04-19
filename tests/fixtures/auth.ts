@@ -142,7 +142,31 @@ export const test = base.extend<TestFixtures>({
 
   authedPage: async ({ page, testUser }, use) => {
     await loginViaUI(page, testUser.email, testUser.password);
-    await use(page);
+    // Wrap goto() to wait until Next.js App Router has removed its RSC
+    // streaming placeholders (<div id="S:N">). In dev mode these placeholders
+    // linger in the DOM for ~200ms after the page is otherwise interactive,
+    // and they contain duplicate copies of the rendered content — which
+    // triggers Playwright strict-mode violations on locators like getByText.
+    const wrappedPage = new Proxy(page, {
+      get(target, prop, receiver) {
+        if (prop === "goto") {
+          return async (
+            url: Parameters<typeof target.goto>[0],
+            options?: Parameters<typeof target.goto>[1],
+          ) => {
+            const result = await target.goto(url, options);
+            await target.waitForFunction(
+              () => !document.querySelector('[id^="S:"]'),
+              null,
+              { timeout: 5_000 },
+            );
+            return result;
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    await use(wrappedPage as typeof page);
   },
 });
 
